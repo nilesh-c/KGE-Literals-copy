@@ -72,16 +72,16 @@ if args.use_gpu:
 
 
 # Load dictionary lookups
-idx2ent = np.load('data/NTN/{}/bin/idx2ent.npy'.format(args.dataset))
-idx2rel = np.load('data/NTN/{}/bin/idx2rel.npy'.format(args.dataset))
+idx2ent = np.load('data/{}/bin/idx2ent.npy'.format(args.dataset))
+idx2rel = np.load('data/{}/bin/idx2rel.npy'.format(args.dataset))
 
 n_e = len(idx2ent)
 n_r = len(idx2rel)
 
 # Load dataset
-X_train = np.load('data/NTN/{}/bin/train.npy'.format(args.dataset))
-X_val = np.load('data/NTN/{}/bin/val.npy'.format(args.dataset))
-y_val = np.load('data/NTN/{}/bin/y_val.npy'.format(args.dataset))
+X_train = np.load('data/{}/bin/train.npy'.format(args.dataset))
+X_val = np.load('data/{}/bin/val.npy'.format(args.dataset))
+y_val = np.load('data/{}/bin/y_val.npy'.format(args.dataset))
 
 X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
 

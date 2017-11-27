@@ -452,6 +452,87 @@ class DistMult(Model):
 
 
 @inherit_docstrings
+class DistMultDecoupled(Model):
+    """
+    DistMult: diagonal bilinear model, without subject and object constraint
+    ------------------------------------------------------------------------
+    Yang, Bishan, et al. "Learning multi-relational semantics using
+    neural-embedding models." arXiv:1411.4072 (2014).
+    """
+
+    def __init__(self, n_s, n_r, n_o, k, lam, gpu=False):
+        """
+        DistMult: diagonal bilinear model, without subject and object constraint
+        ------------------------------------------------------------------------
+
+        Params:
+        -------
+            n_s: int
+                Number of subjects in dataset.
+
+            n_r: int
+                Number of relationships in dataset.
+
+            n_o: int
+                Number of objects in dataset.
+
+            k: int
+                Embedding size.
+
+            lam: float
+                Prior strength of the embeddings. Used to constaint the
+                embedding norms inside a (euclidean) unit ball. The prior is
+                Gaussian, this param is the precision.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
+        """
+        super(DistMultDecoupled, self).__init__(gpu)
+
+        # Hyperparams
+        self.n_s = n_s
+        self.n_r = n_r
+        self.n_o = n_o
+        self.k = k
+        self.lam = lam
+
+        # Nets
+        self.emb_S = nn.Embedding(self.n_s, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
+        self.emb_O = nn.Embedding(self.n_o, self.k)
+
+        self.embeddings = [self.emb_S, self.emb_R, self.emb_O]
+        self.initialize_embeddings()
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
+    def forward(self, X):
+        # Decompose X into head, relationship, tail
+        s, r, o = X[:, 0], X[:, 1], X[:, 2]
+
+        if self.gpu:
+            s = Variable(torch.from_numpy(s).cuda())
+            r = Variable(torch.from_numpy(r).cuda())
+            o = Variable(torch.from_numpy(o).cuda())
+        else:
+            s = Variable(torch.from_numpy(s))
+            r = Variable(torch.from_numpy(r))
+            o = Variable(torch.from_numpy(o))
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_S(s)
+        e_o = self.emb_O(o)
+        W = self.emb_R(r)
+
+        # Forward
+        f = torch.sum(e_s * W * e_o, 1)
+
+        return f.view(-1, 1)
+
+
+@inherit_docstrings
 class ERMLP(Model):
     """
     ER-MLP: Entity-Relation MLP

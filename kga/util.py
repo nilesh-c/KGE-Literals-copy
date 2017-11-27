@@ -82,6 +82,50 @@ def sample_negatives2(X, n_e):
     return np.array(X_corr, dtype=int)
 
 
+def sample_negatives3(X, n_s, n_o):
+    """
+    Perform negative sampling by corrupting head or tail of each triplets in
+    dataset.
+
+    Params:
+    -------
+    X: int matrix of M x 3, where M is the (mini)batch size
+        First column contains index of head entities.
+        Second column contains index of relationships.
+        Third column contains index of tail entities.
+
+    n_s: int
+        Number of subjects in dataset.
+
+    n_o: int
+        Number of objects in dataset.
+
+    Returns:
+    --------
+    X_corr: int matrix of M x 3, where M is the (mini)batch size
+        Similar to input param X, but at each column, either first or third col
+        is subtituted with random entity.
+    """
+    M = X.shape[0]
+
+    idxs = np.random.choice([0, 2], size=M)
+    mask_s = np.where(idxs == 0)
+    mask_o = np.where(idxs == 2)
+
+    n_idxs_s = (idxs == 0).sum()
+    n_idxs_o = (idxs == 2).sum()
+
+    corr_s = np.random.randint(n_s, size=n_idxs_s)
+    corr_o = np.random.randint(n_o, size=n_idxs_o)
+
+    X_corr = np.copy(X)
+
+    X_corr[mask_s, 0] = corr_s
+    X_corr[mask_o, 2] = corr_o
+
+    return X_corr
+
+
 def load_dictionary(file_path):
     """
     Load (unique) entity or relation list. To be used as dictionary lookup,
