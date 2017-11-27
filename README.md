@@ -19,7 +19,7 @@ Knowledge Graph Analysis with literals in PyTorch.
 ## Running the Models
 ### Training
 ```
-python run_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {wordnet,fb15k} --use_gpu {True,False}
+python run_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {NTN/wordnet,NTN/fb15k} --use_gpu
 ```
 See `python run_baselines.py --help` for further options, e.g. hyperparameters:
 
@@ -57,8 +57,7 @@ optional arguments:
                         (default: models/)
   --resume              resume the training from latest checkpoint (default:
                         False
-  --use_gpu             whether to run in the GPU or CPU (default: False <i.e.
-                        CPU>)
+  --use_gpu             whether to run in the GPU
   --randseed            resume the training from latest checkpoint (default:
                         False
 ```
@@ -67,7 +66,7 @@ optional arguments:
 **Note:** All hyperparameters of the model _must_ match those used during training.
 
 ```
-python test_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {wordnet,fb15k} --use_gpu {True,False}
+python test_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {NTN/wordnet,NTN/fb15k} --use_gpu
 ```
 See `python test_baselines.py --help` for further options, e.g. hyperparameters:
 
@@ -92,8 +91,7 @@ optional arguments:
   --nn_n                number of entities/relations for nearest neighbours
                         (default: 5)
   --nn_k                k in k-nearest-neighbours (default: 5)
-  --use_gpu             whether to run in the GPU or CPU (default: False <i.e.
-                        CPU>)
+  --use_gpu             whether to run in the GPU
   --randseed            resume the training from latest checkpoint (default:
                         False
 ```

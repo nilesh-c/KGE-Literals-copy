@@ -42,7 +42,7 @@ parser.add_argument('--checkpoint_dir', default='models/', metavar='',
 parser.add_argument('--resume', default=False, type=bool, metavar='',
                     help='resume the training from latest checkpoint (default: False')
 parser.add_argument('--use_gpu', default=False, action='store_true',
-                    help='whether to run in the GPU or CPU (default: False <i.e. CPU>)')
+                    help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
 

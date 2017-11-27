@@ -25,8 +25,8 @@ parser.add_argument('--transe_metric', default='l2', metavar='',
                     help='whether to use `l1` or `l2` metric for TransE (default: l2)')
 parser.add_argument('--mlp_h', type=int, default=100, metavar='',
                     help='size of ER-MLP hidden layer (default: 100)')
-parser.add_argument('--mlp_dropout_p', type=float, default=0.5, metavar='',
-                    help='Probability of dropping out neuron in dropout (default: 0.5)')
+parser.add_argument('--mlp_dropout_p', type=float, default=0, metavar='',
+                    help='Probability of dropping out neuron in dropout (default: 0)')
 parser.add_argument('--ntn_slice', type=int, default=4, metavar='',
                     help='number of slices used in NTN (default: 4)')
 parser.add_argument('--mbsize', type=int, default=100, metavar='',
@@ -55,8 +55,8 @@ parser.add_argument('--checkpoint_dir', default='models/', metavar='',
                     help='directory to save model checkpoint, saved every epoch (default: models/)')
 parser.add_argument('--resume', default=False, type=bool, metavar='',
                     help='resume the training from latest checkpoint (default: False')
-parser.add_argument('--use_gpu', default=False, type=bool, metavar='',
-                    help='whether to run in the GPU or CPU (default: False <i.e. CPU>)')
+parser.add_argument('--use_gpu', default=False, action='store_true',
+                    help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
 
