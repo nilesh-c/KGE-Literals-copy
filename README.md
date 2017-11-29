@@ -8,6 +8,7 @@ Knowledge Graph Analysis with literals in PyTorch.
 2. ER-MLP
 3. TransE
 4. DistMult
+5. NTN
 
 ## Getting Started
 

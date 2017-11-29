@@ -116,7 +116,8 @@ for epoch in range(n_epoch):
         # Build batch with negative sampling
         m = X_mb.shape[0]
         # C x M negative samples
-        X_neg_mb = np.vstack([sample_negatives3(X_mb, n_u, n_m) for _ in range(C)])
+        X_neg_mb = np.vstack([sample_negatives_decoupled(X_mb, n_u, n_m)
+                              for _ in range(C)])
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])

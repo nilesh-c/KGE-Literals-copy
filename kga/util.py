@@ -82,10 +82,11 @@ def sample_negatives2(X, n_e):
     return np.array(X_corr, dtype=int)
 
 
-def sample_negatives3(X, n_s, n_o):
+def sample_negatives_decoupled(X, n_s, n_o):
     """
     Perform negative sampling by corrupting head or tail of each triplets in
-    dataset.
+    dataset. This method differs from `sample_negatives(X, n_e)` in a way that
+    this method consider the fact that subject set != object set.
 
     Params:
     -------
