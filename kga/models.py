@@ -163,16 +163,16 @@ class Model(nn.Module):
 
 
 @inherit_docstrings
-class ERLMLP(Model):
+class ERLMLP_MovieLens(Model):
     """
-    ERL-MLP: Entity-Relation-Literal MLP
-    ------------------------------------
+    ERL-MLP: Entity-Relation-Literal MLP for MovieLens
+    --------------------------------------------------
     """
 
-    def __init__(self, n_e, n_r, n_a, k, l, h_dim, gpu=False):
+    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False):
         """
-        ERL-MLP: Entity-Relation-Literal MLP
-        ------------------------------------
+        ERL-MLP: Entity-Relation-Literal MLP for MovieLens
+        --------------------------------------------------
 
         Params:
         -------
@@ -197,31 +197,38 @@ class ERLMLP(Model):
             gpu: bool, default: False
                 Whether to use GPU or not.
         """
-        super(ERLMLP, self).__init__(gpu)
+        super(ERLMLP_MovieLens, self).__init__(gpu)
 
         # Hyperparams
-        self.n_e = n_e
-        self.n_r = n_r
-        self.n_a = n_a
+        self.n_usr = n_usr
+        self.n_mov = n_mov
+        self.n_rat = n_rat
+        self.n_usr_lit = n_usr_lit
+        self.n_mov_lit = n_mov_lit
         self.k = k
-        self.l = l
         self.h_dim = h_dim
 
         # Nets
-        self.emb_E = nn.Embedding(self.n_e, self.k)
-        self.emb_R = nn.Embedding(self.n_r, self.k)
-        self.fc_literal = nn.Linear(self.n_a, self.l)
-        self.fc1 = nn.Linear(3*k+l, h_dim)
-        self.fc2 = nn.Linear(h_dim, 1)
+        self.emb_usr = nn.Embedding(n_usr, k)
+        self.emb_mov = nn.Embedding(n_mov, k)
+        self.emb_rat = nn.Embedding(n_rat, k)
+        self.fc_literal_usr = nn.Linear(n_usr_lit, k)
+        self.fc_literal_mov = nn.Linear(n_mov_lit, k)
 
-        self.embeddings = [self.emb_E, self.emb_R]
+        self.mlp = nn.Sequential(
+            nn.Linear(3*k+n_usr_lit+n_mov_lit, h_dim),
+            nn.ReLU(),
+            nn.Linear(h_dim, 1)
+        )
+
+        self.embeddings = [self.emb_usr, self.emb_mov, self.emb_rat]
         self.initialize_embeddings()
 
         # Copy all params to GPU if specified
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, X_lit):
+    def forward(self, X, X_lit_usr, X_lit_mov):
         """
         Given a (mini)batch of triplets X of size M, predict the validity.
 
@@ -242,58 +249,61 @@ class ERLMLP(Model):
             Contains the probs result of each M data.
         """
         # Decompose X into head, relationship, tail
-        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+        s, r, o = X[:, 0], X[:, 1], X[:, 2]
 
         if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-            X_lit = Variable(torch.from_numpy(X_lit).cuda())
+            s = Variable(torch.from_numpy(s).cuda())
+            r = Variable(torch.from_numpy(r).cuda())
+            o = Variable(torch.from_numpy(o).cuda())
+            X_lit_usr = Variable(torch.from_numpy(X_lit_usr).cuda())
+            X_lit_mov = Variable(torch.from_numpy(X_lit_mov).cuda())
         else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
-            X_lit = Variable(torch.from_numpy(X_lit))
+            s = Variable(torch.from_numpy(s))
+            r = Variable(torch.from_numpy(r))
+            o = Variable(torch.from_numpy(o))
+            X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
+            X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
 
         # Project to embedding, each is M x k
-        e_hs = self.emb_E(hs)
-        e_ts = self.emb_E(ts)
-        e_ls = self.emb_R(ls)
+        e_usr = self.emb_usr(s)
+        e_rat = self.emb_rat(r)
+        e_mov = self.emb_mov(o)
 
         # Project literals to lower dimension subspace
-        e_as = self.fc_literal(X_lit)
+        # e_lit_usr = self.fc_literal_usr(X_lit_usr)
+        # e_lit_mov = self.fc_literal_mov(X_lit_mov)
 
         # Forward
-        phi = torch.cat([e_hs, e_ts, e_ls, e_as], 1)  # M x 3k
-        h = F.relu(self.fc1(phi))
-        y_logit = self.fc2(h)
-        y_prob = F.sigmoid(y_logit)
+        phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov], 1)  # Mx5k
+        score = self.mlp(phi)
 
-        return y_prob
+        return score
 
-    def predict(self, X, X_lit):
+    def predict(self, X, X_lit_usr, X_lit_mov):
         """
         Predict the score of test batch.
 
         Params:
         -------
         X: int matrix of M x 3, where M is the (mini)batch size
-            First column contains index of head entities.
-            Second column contains index of relationships.
-            Third column contains index of tail entities.
+            First row contains index of head entities.
+            Second row contains index of relationships.
+            Third row contains index of tail entities.
 
-        X_lit: float matrix of M x n_a
-            Contains all literals/attributes information of all data in batch.
-            i-th row correspond to the i-th data in X.
+        sigmoid: bool, default: False
+            Whether to apply sigmoid at the prediction or not. Useful if the
+            predicted result is scores/logits.
 
         Returns:
         --------
         y_pred: np.array of Mx1
         """
+        y_pred = self.forward(X, X_lit_usr, X_lit_mov).view(-1, 1)
+
         if self.gpu:
-            return self.forward(X, X_lit).cpu().data.numpy()
+            return y_pred.cpu().data.numpy()
         else:
-            return self.forward(X, X_lit).data.numpy()
+            return y_pred.data.numpy()
 
 
 @inherit_docstrings

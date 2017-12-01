@@ -111,7 +111,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     return mrr, hitsk
 
 
-def eval_embeddings_rel(model, X_test, n_r, k):
+def eval_embeddings_rel(model, X_test, n_r, k, X_lit_usr=None, X_lit_mov=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model.
     The procedure follows Bordes, et. al., 2011.
@@ -145,12 +145,21 @@ def eval_embeddings_rel(model, X_test, n_r, k):
     scores_r = np.zeros([M, n_r])
 
     # Gather scores for correct entities
-    y = model.predict(X_test).ravel()  # M
+    if X_lit_usr is None or X_lit_mov is None:
+        y = model.predict(X_test).ravel()
+    else:
+        y = model.predict(X_test, X_lit_usr, X_lit_mov).ravel()
+
     scores_r[:, 0] = y
 
     for i, r in enumerate(np.arange(5)):  # [0 ... 4]
         X_corr_r[:, 1] = r
-        y_r = model.predict(X_corr_r).ravel()
+
+        if X_lit_usr is None or X_lit_mov is None:
+            y_r = model.predict(X_corr_r).ravel()
+        else:
+            y_r = model.predict(X_corr_r, X_lit_usr, X_lit_mov).ravel()
+
         scores_r[:, i] = y_r
 
     ranks_r = np.array(
