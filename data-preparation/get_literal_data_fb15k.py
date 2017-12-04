@@ -39,7 +39,7 @@ class Querier(object):
         query = """SELECT DISTINCT ?p ?o WHERE {{
             {} ?p ?o .
             {}
-        }}""".format(entity, "FILTER (isLiteral(?o) && (lang(?o) = \"\" || langMatches(lang(?o), '{}')))".format(language) if language is not None else "")
+        }}""".format(entity, "FILTER (isLiteral(?o) && langMatches(lang(?o), '{}')))".format(language) if language is not None else "")
         res = self._exec_query(query)
         results = res["results"]["bindings"]
         alltriples = []
@@ -63,7 +63,7 @@ class Querier(object):
 
 if __name__ == "__main__":
 
-    filename = 'data/fb15k+ntn/fb15k/freebase_mtr100_mte100-test.txt'
+    filename = 'data/fb15k/freebase_mtr100_mte100-test.txt'
     data = pd.read_csv(filename, header=None, sep='\t') 
     subject_ = list(set(data[0].values))
     object_ = list(set(data[2].values))    
@@ -82,9 +82,9 @@ if __name__ == "__main__":
             except ValueError:
                 continue
         if i==0:
-            f = open('data/fb15k-literal/train_subject_numerical_triples.txt','w')    
+            f = open('../data/fb15k-literal/train_subject_string_triples.txt','w')    
         else:            
-            f = open('data/fb15k-literal/train_subject_numerical_triples.txt','a')    
+            f = open('../data/fb15k-literal/train_subject_string_triples.txt','a')    
         for triple in numerical_literaltriples:
             triple = '\t'.join(en for en in triple)
             f.write(triple +'\n')
@@ -104,9 +104,9 @@ if __name__ == "__main__":
             except ValueError:
                 continue
         if i==0:
-            f1 = open('data/fb15k-literal/train_object_numerical_triples.txt','w')    
+            f1 = open('../data/fb15k-literal/train_subject_numerical_triples.txt','w')    
         else:            
-            f1 = open('data/fb15k-literal/train_object_numerical_triples.txt','a')    
+            f1 = open('../data/fb15k-literal/train_subject_numerical_triples.txt','a')    
         for triple in numerical_literaltriples:
             triple = '\t'.join(en for en in triple)
             f1.write(triple +'\n')

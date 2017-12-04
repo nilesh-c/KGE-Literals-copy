@@ -171,56 +171,6 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_usr=None, X_lit_mov=None):
 
     return mrr, hitsk
 
-def eval_embeddings_rel_literal(model, X_test, s_lit, o_lit, n_r, k):
-    """
-    Compute Mean Reciprocal Rank and Hits@k score of embedding model.
-    The procedure follows Bordes, et. al., 2011.
-
-    Params:
-    -------
-    model: kga.Model
-        Embedding model to be evaluated.
-
-    X_test: M x 3 matrix, where M is data size
-        Contains M test triplets.
-
-    n_e: int
-        Number of entities in dataset.
-
-    k: int
-        Max rank to be considered, i.e. to be used in Hits@k metric.
-
-
-    Returns:
-    --------
-    mrr: float
-        Mean Reciprocal Rank.
-
-    hitsk: float
-        Hits@k.
-    """
-    M = X_test.shape[0]
-
-    X_corr_r = np.copy(X_test)
-    scores_r = np.zeros([M, n_r])
-    # Gather scores for correct entities
-    y = model.predict(X_test, s_lit, o_lit).ravel()  # M
-    scores_r[:, 0] = y
-    for i, r in enumerate(np.arange(5)):  # [0 ... 4]
-        X_corr_r[:, 1] = r
-        y_r = model.predict(X_corr_r, s_lit, o_lit).ravel()
-        scores_r[:, i] = y_r
-
-    ranks_r = np.array(
-        [st.rankdata(s)[r] for s, r in zip(scores_r, X_test[:, 1])]
-    )
-
-    mrr = np.mean(1/ranks_r)
-    hitsk = np.mean(ranks_r <= k)
-
-    return mrr, hitsk
-
-
 def entity_nn(model, n=10, k=5, idx2ent=None):
     """
     Compute nearest neighbours of all entities embeddings of a model.
