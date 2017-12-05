@@ -127,6 +127,40 @@ def sample_negatives_decoupled(X, n_s, n_o):
     return X_corr
 
 
+def get_dictionary(dataset_dir):
+    """
+    Let X be file consists of triples, return idx2ent and idx2rel dictionaries.
+
+    Params:
+    -------
+    dataset_dir: string
+        Path to directory containing train.txt, valid.txt, test.txt.
+
+    Returns:
+    --------
+    idx2ent: np.array of n_e
+        List of unique entities.
+
+    idx2rel: np.array of n_r
+        List of unique relations.
+    """
+    dataset_dir = dataset_dir.rstrip('/')
+
+    idx2ent = set()
+    idx2rel = set()
+
+    for f_name in ['train.txt', 'valid.txt', 'test.txt']:
+        df = pd.read_csv('{}/{}'.format(dataset_dir, f_name), sep='\t', header=None)
+
+        s = set(df[0])
+        o = set(df[2])
+
+        idx2ent = idx2ent.union(s.union(o))
+        idx2rel = idx2rel.union(set(df[1].unique()))
+
+    return np.array(list(idx2ent)), np.array(list(idx2rel))
+
+
 def load_dictionary(file_path):
     """
     Load (unique) entity or relation list. To be used as dictionary lookup,
