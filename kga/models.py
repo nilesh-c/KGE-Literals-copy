@@ -163,6 +163,125 @@ class Model(nn.Module):
 
 
 @inherit_docstrings
+class ERLMLP(Model):
+    """
+    ERL-MLP: Entity-Relation-Literal MLP for generic KG
+    ---------------------------------------------------
+    """
+
+    def __init__(self, n_ent, n_rel, n_lit, k, h_dim, gpu=False):
+        """
+        ERL-MLP: Entity-Relation-Literal MLP for generic KG
+        ---------------------------------------------------
+
+        Params:
+        -------
+            n_ent: int
+                Number of entities in dataset.
+
+            n_rel: int
+                Number of relationships in dataset.
+
+            n_lit: int
+                Number of attributes/literals in dataset.
+
+            k: int
+                Embedding size for entity and relationship.
+
+            l: int
+                Size of projected attributes/literals.
+
+            h_dim: int
+                Size of hidden layer.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
+        """
+        super(ERLMLP, self).__init__(gpu)
+
+        # Hyperparams
+        self.n_ent = n_ent
+        self.n_rel = n_rel
+        self.n_lit = n_lit
+        self.k = k
+        self.h_dim = h_dim
+
+        # Nets
+        self.emb_ent = nn.Embedding(n_ent, k)
+        self.emb_rel = nn.Embedding(n_rel, k)
+
+        self.mlp = nn.Sequential(
+            nn.Linear(3*k+2*n_lit, h_dim),
+            nn.ReLU(),
+            nn.Linear(h_dim, 1)
+        )
+
+        self.embeddings = [self.emb_ent, self.emb_rel]
+        self.initialize_embeddings()
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
+    def forward(self, X, X_lit_s, X_lit_o):
+        """
+        Given a (mini)batch of triplets X of size M, predict the validity.
+
+        Params:
+        -------
+        X: int matrix of M x 3, where M is the (mini)batch size
+            First column contains index of head entities.
+            Second column contains index of relationships.
+            Third column contains index of tail entities.
+
+        X_lit_s: float matrix of M x n_a
+            Contains literals for every subjects in X.
+
+        X_lit_o: float matrix of M x n_a
+            Contains literals for every objects in X.
+
+        Returns:
+        --------
+        y: Mx1 vectors
+            Contains the probs result of each M data.
+        """
+        # Decompose X into head, relationship, tail
+        s, r, o = X[:, 0], X[:, 1], X[:, 2]
+
+        if self.gpu:
+            s = Variable(torch.from_numpy(s).cuda())
+            r = Variable(torch.from_numpy(r).cuda())
+            o = Variable(torch.from_numpy(o).cuda())
+            X_lit_s = Variable(torch.from_numpy(X_lit_s).cuda())
+            X_lit_o = Variable(torch.from_numpy(X_lit_o).cuda())
+        else:
+            s = Variable(torch.from_numpy(s))
+            r = Variable(torch.from_numpy(r))
+            o = Variable(torch.from_numpy(o))
+            X_lit_s = Variable(torch.from_numpy(X_lit_s))
+            X_lit_o = Variable(torch.from_numpy(X_lit_o))
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_ent(s)
+        e_r = self.emb_rel(r)
+        e_o = self.emb_ent(o)
+
+        # Forward
+        phi = torch.cat([e_s, e_r, e_o, X_lit_s, X_lit_o], 1)
+        score = self.mlp(phi)
+
+        return score
+
+    def predict(self, X, X_lit_s, X_lit_o):
+        y_pred = self.forward(X, X_lit_s, X_lit_o).view(-1, 1)
+
+        if self.gpu:
+            return y_pred.cpu().data.numpy()
+        else:
+            return y_pred.data.numpy()
+
+
+@inherit_docstrings
 class ERLMLP_MovieLens(Model):
     """
     ERL-MLP: Entity-Relation-Literal MLP for MovieLens
@@ -212,8 +331,6 @@ class ERLMLP_MovieLens(Model):
         self.emb_usr = nn.Embedding(n_usr, k)
         self.emb_mov = nn.Embedding(n_mov, k)
         self.emb_rat = nn.Embedding(n_rat, k)
-        self.fc_literal_usr = nn.Linear(n_usr_lit, k)
-        self.fc_literal_mov = nn.Linear(n_mov_lit, k)
 
         self.mlp = nn.Sequential(
             nn.Linear(3*k+n_usr_lit+n_mov_lit, h_dim),
@@ -269,10 +386,6 @@ class ERLMLP_MovieLens(Model):
         e_rat = self.emb_rat(r)
         e_mov = self.emb_mov(o)
 
-        # Project literals to lower dimension subspace
-        # e_lit_usr = self.fc_literal_usr(X_lit_usr)
-        # e_lit_mov = self.fc_literal_mov(X_lit_mov)
-
         # Forward
         phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov], 1)  # Mx5k
         score = self.mlp(phi)
@@ -280,24 +393,6 @@ class ERLMLP_MovieLens(Model):
         return score
 
     def predict(self, X, X_lit_usr, X_lit_mov):
-        """
-        Predict the score of test batch.
-
-        Params:
-        -------
-        X: int matrix of M x 3, where M is the (mini)batch size
-            First row contains index of head entities.
-            Second row contains index of relationships.
-            Third row contains index of tail entities.
-
-        sigmoid: bool, default: False
-            Whether to apply sigmoid at the prediction or not. Useful if the
-            predicted result is scores/logits.
-
-        Returns:
-        --------
-        y_pred: np.array of Mx1
-        """
         y_pred = self.forward(X, X_lit_usr, X_lit_mov).view(-1, 1)
 
         if self.gpu:
