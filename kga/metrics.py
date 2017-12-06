@@ -42,7 +42,7 @@ def auc(y_pred, y_true):
     return roc_auc_score(y_true, y_pred)
 
 
-def eval_embeddings(model, X_test, n_e, k, n_sample=100):
+def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model.
     The procedure follows Bordes, et. al., 2011.
@@ -61,9 +61,13 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     k: int
         Max rank to be considered, i.e. to be used in Hits@k metric.
 
-    n_sample: int, default: 100
+    n_sample: int, default: 1000
         Number of negative entities to be considered. These n_sample negative
-        samples are randomly picked w/o replacement from [0, n_e).
+        samples are randomly picked w/o replacement from [0, n_e). Consider
+        setting this to get the (fast) approximation of mrr and hits@k.
+
+    X_lit: n_e x n_l matrix
+        Matrix containing all literals for all entities.
 
 
     Returns:
@@ -79,25 +83,42 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     X_corr_h = np.copy(X_test)
     X_corr_t = np.copy(X_test)
 
-    scores_h = np.zeros([M, n_sample+1])
-    scores_t = np.zeros([M, n_sample+1])
+    N = n_sample+1 if n_sample is not None else n_e+1
+
+    scores_h = np.zeros([M, N])
+    scores_t = np.zeros([M, N])
 
     # Gather scores for correct entities
-    y = model.predict(X_test).ravel()  # M
+    if X_lit is None:
+        y = model.predict(X_test).ravel()
+    else:
+        X_lit_s_ori = X_lit[X_test[:, 0]]
+        X_lit_o_ori = X_lit[X_test[:, 2]]
+        y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori).ravel()
+
     scores_h[:, 0] = y
     scores_t[:, 0] = y
 
-    # Gather scores for some random negative entities
-    rand_ents = np.random.choice(np.arange(n_e), size=n_sample, replace=False)
+    if n_sample is not None:
+        # Gather scores for some random negative entities
+        ents = np.random.choice(np.arange(n_e), size=n_sample, replace=False)
+    else:
+        ents = np.arange(n_e)
 
-    for i, e in enumerate(rand_ents):
+    for i, e in enumerate(ents):
         idx = i+1  # as i == 0 is for correct triplet score
 
         X_corr_h[:, 0] = e
         X_corr_t[:, 2] = e
 
-        y_h = model.predict(X_corr_h).ravel()
-        y_t = model.predict(X_corr_t).ravel()
+        if X_lit is None:
+            y_h = model.predict(X_corr_h).ravel()
+            y_t = model.predict(X_corr_t).ravel()
+        else:
+            X_lit_s = X_lit[X_corr_h[:, 0]]
+            X_lit_o = X_lit[X_corr_t[:, 2]]
+            y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori).ravel()
+            y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o).ravel()
 
         scores_h[:, idx] = y_h
         scores_t[:, idx] = y_t
@@ -111,10 +132,10 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=100):
     return mrr, hitsk
 
 
-def eval_embeddings_rel(model, X_test, n_r, k, X_lit_usr=None, X_lit_mov=None):
+def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s, X_lit_o):
     """
-    Compute Mean Reciprocal Rank and Hits@k score of embedding model.
-    The procedure follows Bordes, et. al., 2011.
+    Compute Mean Reciprocal Rank and Hits@k score of embedding model by ranking
+    relations. The procedure follows Bordes, et. al., 2011.
 
     Params:
     -------
@@ -129,6 +150,12 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_usr=None, X_lit_mov=None):
 
     k: int
         Max rank to be considered, i.e. to be used in Hits@k metric.
+
+    X_lit_s: M x n_l_s matrix
+        Matrix containing all literals for test subjects.
+
+    X_lit_o: M x n_l_o matrix
+        Matrix containing all literals for test objects.
 
 
     Returns:
@@ -145,20 +172,20 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_usr=None, X_lit_mov=None):
     scores_r = np.zeros([M, n_r])
 
     # Gather scores for correct entities
-    if X_lit_usr is None or X_lit_mov is None:
+    if X_lit_s is None or X_lit_o is None:
         y = model.predict(X_test).ravel()
     else:
-        y = model.predict(X_test, X_lit_usr, X_lit_mov).ravel()
+        y = model.predict(X_test, X_lit_s, X_lit_o).ravel()
 
     scores_r[:, 0] = y
 
     for i, r in enumerate(np.arange(5)):  # [0 ... 4]
         X_corr_r[:, 1] = r
 
-        if X_lit_usr is None or X_lit_mov is None:
+        if X_lit_s is None or X_lit_o is None:
             y_r = model.predict(X_corr_r).ravel()
         else:
-            y_r = model.predict(X_corr_r, X_lit_usr, X_lit_mov).ravel()
+            y_r = model.predict(X_corr_r, X_lit_s, X_lit_o).ravel()
 
         scores_r[:, i] = y_r
 
@@ -170,6 +197,7 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_usr=None, X_lit_mov=None):
     hitsk = np.mean(ranks_r <= k)
 
     return mrr, hitsk
+
 
 def entity_nn(model, n=10, k=5, idx2ent=None):
     """

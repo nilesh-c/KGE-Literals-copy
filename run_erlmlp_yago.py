@@ -167,11 +167,10 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            mrr, hits10 = eval_embeddings_rel(model, X_val, n_rel, 1,
-                                              X_lit_s_val, X_lit_o_val)
+            mrr, hits = eval_embeddings(model, X_val, n_ent, 10, n_sample=1000, X_lit=X_lit)
 
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mrr, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss.data[0], mrr, hits, end-start))
 
         it += 1
 
