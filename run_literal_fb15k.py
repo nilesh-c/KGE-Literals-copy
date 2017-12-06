@@ -7,12 +7,13 @@ import os
 from time import time
 from sklearn.utils import shuffle as skshuffle
 import pdb
+from scipy.sparse import load_npz
 
 k = 50
 gamma = 1
 negative_samples = 10
 nepoch = 20
-average_loss = False
+average_loss = True
 lr = 0.01
 lr_decay_every = 20
 weight_decay = 1e-4
@@ -44,10 +45,10 @@ X_train = np.load('data/fb15k-literal/bin/train.npy')
 X_val = np.load('data/fb15k-literal/bin/val.npy')
 
 # Load Literals
-train_literal_s = np.load('data/fb15k-literal/bin/train_literal_s.npy').astype(np.float32)
-train_literal_o = np.load('data/fb15k-literal/bin/train_literal_o.npy').astype(np.float32)
-val_literal_s = np.load('data/fb15k-literal/bin/val_literal_s.npy').astype(np.float32)
-val_literal_o = np.load('data/fb15k-literal/bin/val_literal_o.npy').astype(np.float32)
+train_literal_s = load_npz('data/fb15k-literal/bin/train_literal_s.npz').todense().astype(np.float32)
+train_literal_o = load_npz('data/fb15k-literal/bin/train_literal_o.npz').todense().astype(np.float32)
+val_literal_s = load_npz('data/fb15k-literal/bin/val_literal_s.npz').todense().astype(np.float32)
+val_literal_o = load_npz('data/fb15k-literal/bin/val_literal_o.npz').todense().astype(np.float32)
 
 n_l = train_literal_s.shape[1]
 M_train = X_train.shape[0]
@@ -57,18 +58,18 @@ k = k
 lam = embeddings_lambda
 C = negative_samples
 # Initialize model
-model = DistMult_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
-
+#model = DistMult_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
+model = RESCAL_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
 # Training params
 lr = lr
 wd = weight_decay
-
-solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+solver = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+#solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 n_epoch = nepoch
 mb_size = mbsize  # 2x with negative sampling
 print_every = log_interval
 checkpoint_dir = '{}/fb-15k'.format(checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/distmult_rank.bin'.format(checkpoint_dir)
+checkpoint_path = '{}/rescal_rank.bin'.format(checkpoint_dir)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
