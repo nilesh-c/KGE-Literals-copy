@@ -1,3 +1,6 @@
+import sys
+sys.path.append('.')
+
 from kga.models import *
 from kga.metrics import *
 from kga.util import *
@@ -10,7 +13,7 @@ from sklearn.utils import shuffle as skshuffle
 
 
 parser = argparse.ArgumentParser(
-    description='Train MT-KGNN on MovieLens'
+    description='Train ERMLP with literals on MovieLens'
 )
 
 parser.add_argument('--k', type=int, default=50, metavar='',
@@ -81,15 +84,17 @@ X_lit_mov = np.load('data/ml-100k/bin/movie_literals.npy').astype(np.float32)
 # Preprocess literals
 
 
-def normalize(X, minn, maxx):
-    return (X - minn) / (maxx - minn + 1e-8)
+def standardize(X, mean, std):
+    return (X - mean) / (std + 1e-8)
 
 
-max_usr, min_usr = np.max(X_lit_usr, axis=0), np.min(X_lit_usr, axis=0)
-X_lit_usr = normalize(X_lit_usr, max_usr, min_usr)
+mean_usr = np.mean(X_lit_usr, axis=0)
+std_usr = np.std(X_lit_usr, axis=0)
+X_lit_usr = standardize(X_lit_usr, mean_usr, std_usr)
 
-max_mov, min_mov = np.max(X_lit_mov, axis=0), np.min(X_lit_mov, axis=0)
-X_lit_mov = normalize(X_lit_mov, max_mov, min_mov)
+mean_mov = np.mean(X_lit_mov, axis=0)
+std_mov = np.std(X_lit_mov, axis=0)
+X_lit_mov = standardize(X_lit_mov, mean_mov, std_mov)
 
 # Preload literals for validation
 X_lit_usr_val = X_lit_usr[X_val[:, 0]]
@@ -107,7 +112,7 @@ lam = args.embeddings_lambda
 C = args.negative_samples
 
 # Initialize model
-model = MTKGNN_MovieLens(n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, lam, args.use_gpu)
+model = ERLMLP_MovieLens(n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, args.use_gpu)
 
 # Training params
 lr = args.lr
@@ -151,38 +156,18 @@ for epoch in range(n_epoch):
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
-        m_total = X_train_mb.shape[0]
-
-        # Random attribute to predict for users and movies in X_train_mb
-        usr_attr = np.random.randint(n_usr_lit, size=m_total)
-        mov_attr = np.random.randint(n_mov_lit, size=m_total)
-
-        # Ground truth literals
-        y_true_lit_usr = X_lit_usr[X_train_mb[:, 0], usr_attr]
-        y_true_lit_mov = X_lit_mov[X_train_mb[:, 2], mov_attr]
-
-        y_true_lit_usr = Variable(torch.from_numpy(y_true_lit_usr))
-        y_true_lit_mov = Variable(torch.from_numpy(y_true_lit_mov))
+        X_lit_usr_mb = X_lit_usr[X_train_mb[:, 0]]
+        X_lit_mov_mb = X_lit_mov[X_train_mb[:, 2]]
 
         # Training step
-        y_er, y_lit_usr, y_lit_mov = model.forward(X_train_mb, usr_attr, mov_attr)
-        y_er_pos, y_er_neg = y_er[:m], y_er[m:]
+        y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb)
+        y_pos, y_neg = y[:m], y[m:]
 
-        # Relation net update
-        loss_er = model.ranking_loss(
-            y_er_pos, y_er_neg, margin=1, C=C, average=args.average_loss
+        loss = model.ranking_loss(
+            y_pos, y_neg, margin=1, C=C, average=args.average_loss
         )
 
-        loss_er.backward()
-        solver.step()
-        solver.zero_grad()
-
-        # Attribute nets update
-        loss_lit_usr = F.mse_loss(y_lit_usr, y_true_lit_usr)
-        loss_lit_mov = F.mse_loss(y_lit_mov, y_true_lit_mov)
-        loss_lit = loss_lit_usr + loss_lit_mov
-
-        loss_lit.backward()
+        loss.backward()
         solver.step()
         solver.zero_grad()
 
@@ -193,12 +178,12 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            loss_total = loss_er + loss_lit
-            mrr, hits10 = eval_embeddings_rel(model, X_val, n_rat, 1)
+            mrr, hits = eval_embeddings_rel(model, X_val, n_rat, 1,
+                                            X_lit_usr_val, X_lit_mov_val)
 
             # For TransE, show loss, mrr & hits@10
             print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss_total.data[0], mrr, hits10, end-start))
+                  .format(it, loss.data[0], mrr, hits, end-start))
 
         it += 1
 

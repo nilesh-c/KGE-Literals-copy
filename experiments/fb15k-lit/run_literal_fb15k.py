@@ -1,3 +1,6 @@
+import sys
+sys.path.append('.')
+
 from kga.models import *
 from kga.metrics import *
 from kga.util import *
