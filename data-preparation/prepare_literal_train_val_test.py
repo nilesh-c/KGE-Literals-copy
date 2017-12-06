@@ -4,6 +4,7 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+from scipy.sparse  import save_npz, csc_matrix
 
 def literal_subject_object(X, idx2literal, literal_data):
 	X_literal_s = []
@@ -39,9 +40,13 @@ train_literal_s = scaler1.transform(train_literal_s)
 scaler2 = MinMaxScaler()
 scaler2.fit(train_literal_o)
 train_literal_o = scaler2.transform(train_literal_o)
+train_literal_s = csc_matrix(train_literal_s)
+train_literal_o = csc_matrix(train_literal_o)
 
-np.save('../data/fb15k-literal/bin/train_literal_s.npy',train_literal_s)
-np.save('../data/fb15k-literal/bin/train_literal_o.npy',train_literal_o)
+#np.save('data/fb15k-literal/bin/train_literal_s.npy',train_literal_s)
+#np.save('data/fb15k-literal/bin/train_literal_o.npy',train_literal_o)
+save_npz('../data/fb15k-literal/bin/train_literal_s.npz',train_literal_s)
+save_npz('../data/fb15k-literal/bin/train_literal_o.npz',train_literal_o)
 
 #Validation Set
 X = np.load('../data/fb15k-literal/bin/val.npy')
@@ -49,8 +54,13 @@ val_literal_s, val_literal_o = literal_subject_object(X, idx2literal, literal_da
 val_literal_s = scaler1.transform(val_literal_s)
 val_literal_o = scaler2.transform(val_literal_o)
 
-np.save('../data/fb15k-literal/bin/val_literal_s.npy',val_literal_s)
-np.save('../data/fb15k-literal/bin/val_literal_o.npy',val_literal_o)
+val_literal_s = csc_matrix(val_literal_s)
+val_literal_o = csc_matrix(val_literal_o)
+
+#np.save('data/fb15k-literal/bin/val_literal_s.npy',val_literal_s)
+#np.save('data/fb15k-literal/bin/val_literal_o.npy',val_literal_o)
+save_npz('../data/fb15k-literal/bin/val_literal_s.npz',val_literal_s)
+save_npz('../data/fb15k-literal/bin/val_literal_o.npz',val_literal_o)
 
 #Test Set
 X = np.load('../data/fb15k-literal/bin/test.npy')
@@ -58,5 +68,11 @@ test_literal_s, test_literal_o = literal_subject_object(X, idx2literal, literal_
 test_literal_s = scaler1.transform(test_literal_s)
 test_literal_o = scaler2.transform(test_literal_o)
 
-np.save('../data/fb15k-literal/bin/test_literal_s.npy',test_literal_s)
-np.save('../data/fb15k-literal/bin/test_literal_o.npy',test_literal_o)
+test_literal_s = csc_matrix(test_literal_s)
+test_literal_o = csc_matrix(test_literal_o)
+
+#np.save('data/fb15k-literal/bin/test_literal_s.npy',test_literal_s)
+#np.save('data/fb15k-literal/bin/test_literal_o.npy',test_literal_o)
+
+save_npz('../data/fb15k-literal/bin/test_literal_s.npz',test_literal_s)
+save_npz('../data/fb15k-literal/bin/test_literal_o.npz',test_literal_o)

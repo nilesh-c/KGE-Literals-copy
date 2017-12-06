@@ -15,13 +15,13 @@ triples_obj = [line.strip().split('\t') for line in open(filename2,'r')]
 triples_obj_col = list(zip(*triples_obj))
 
 all_predicate = triples_sub_col[1] + triples_obj_col[1]
+predicate_freq = Counter(all_predicate)
 predicate_ = list(set(all_predicate))
-predicate_freq = Counter(predicate_)
 
 # Literal triples for all subject and object
 triples = triples_sub + triples_obj
 # Frequency of relations in literal dataset
-with open('data/fb15k-literal/frequency-count.txt','w') as f:
+with open('../data/fb15k-literal/frequency-count.txt','w') as f:
 	for entity, freq in predicate_freq.items():
 		f.write(entity + '\t' + str(freq) + '\n')
 
