@@ -9,6 +9,7 @@ import kga.util as util
 from kga.util import inherit_docstrings
 import pdb
 
+
 class Model(nn.Module):
     """
     Base class of all models
@@ -288,7 +289,7 @@ class ERLMLP_MovieLens(Model):
     --------------------------------------------------
     """
 
-    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False):
+    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False, img_lit=False):
         """
         ERL-MLP: Entity-Relation-Literal MLP for MovieLens
         --------------------------------------------------
@@ -326,14 +327,22 @@ class ERLMLP_MovieLens(Model):
         self.n_mov_lit = n_mov_lit
         self.k = k
         self.h_dim = h_dim
+        self.img_lit = img_lit
 
         # Nets
         self.emb_usr = nn.Embedding(n_usr, k)
         self.emb_mov = nn.Embedding(n_mov, k)
         self.emb_rat = nn.Embedding(n_rat, k)
 
+        # Image embeddings
+        if img_lit:
+            self.emb_img = nn.AdaptiveAvgPool1d(self.k)
+            n_input = 4*k+n_usr_lit+n_mov_lit
+        else:
+            n_input = 3*k+n_usr_lit+n_mov_lit
+
         self.mlp = nn.Sequential(
-            nn.Linear(3*k+n_usr_lit+n_mov_lit, h_dim),
+            nn.Linear(n_input, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, 1)
         )
@@ -345,7 +354,7 @@ class ERLMLP_MovieLens(Model):
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, X_lit_usr, X_lit_mov):
+    def forward(self, X, X_lit_usr, X_lit_mov, X_lit_img=None):
         """
         Given a (mini)batch of triplets X of size M, predict the validity.
 
@@ -365,6 +374,8 @@ class ERLMLP_MovieLens(Model):
         y: Mx1 vectors
             Contains the probs result of each M data.
         """
+        M = X.shape[0]
+
         # Decompose X into head, relationship, tail
         s, r, o = X[:, 0], X[:, 1], X[:, 2]
 
@@ -386,14 +397,22 @@ class ERLMLP_MovieLens(Model):
         e_rat = self.emb_rat(r)
         e_mov = self.emb_mov(o)
 
-        # Forward
-        phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov], 1)  # Mx5k
+        if self.img_lit and X_lit_img is not None:
+            # Project image features to embedding of M x k
+            e_img = self.emb_img(X_lit_img.view(M, 1, -1))
+            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_img], 1)
+        else:
+            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov], 1)
+
         score = self.mlp(phi)
 
         return score
 
-    def predict(self, X, X_lit_usr, X_lit_mov):
-        y_pred = self.forward(X, X_lit_usr, X_lit_mov).view(-1, 1)
+    def predict(self, X, X_lit_usr, X_lit_mov, X_lit_img=None):
+        if self.img_lit and X_lit_img is not None:
+            y_pred = self.forward(X, X_lit_usr, X_lit_mov, X_lit_img).view(-1, 1)
+        else:
+            y_pred = self.forward(X, X_lit_usr, X_lit_mov).view(-1, 1)
 
         if self.gpu:
             return y_pred.cpu().data.numpy()

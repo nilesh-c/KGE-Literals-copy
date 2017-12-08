@@ -132,7 +132,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     return mrr, hitsk
 
 
-def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s, X_lit_o):
+def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit_img=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model by ranking
     relations. The procedure follows Bordes, et. al., 2011.
@@ -185,7 +185,10 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s, X_lit_o):
         if X_lit_s is None or X_lit_o is None:
             y_r = model.predict(X_corr_r).ravel()
         else:
-            y_r = model.predict(X_corr_r, X_lit_s, X_lit_o).ravel()
+            if X_lit_img is None:
+                y_r = model.predict(X_corr_r, X_lit_s, X_lit_o).ravel()
+            else:
+                y_r = model.predict(X_corr_r, X_lit_s, X_lit_o, X_lit_img).ravel()
 
         scores_r[:, i] = y_r
 

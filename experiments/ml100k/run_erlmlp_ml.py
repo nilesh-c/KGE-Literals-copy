@@ -48,10 +48,12 @@ parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
-parser.add_argument('--use_user_lit', default=False, type=bool, metavar='',
+parser.add_argument('--use_user_lit', default=False, action='store_true',
                     help='whether to use users literals (default: False)')
-parser.add_argument('--use_movie_lit', default=False, type=bool, metavar='',
+parser.add_argument('--use_movie_lit', default=False, action='store_true',
                     help='whether to use movies literals (default: False)')
+parser.add_argument('--use_image_lit', default=False, action='store_true',
+                    help='whether to use images literals (default: False)')
 
 args = parser.parse_args()
 
@@ -80,6 +82,7 @@ X_val = np.load('data/ml-100k/bin/rating_val.npy')
 # Load literals
 X_lit_usr = np.load('data/ml-100k/bin/user_literals.npy').astype(np.float32)
 X_lit_mov = np.load('data/ml-100k/bin/movie_literals.npy').astype(np.float32)
+X_lit_img = np.load('data/ml-100k/bin/image_literals.npy').astype(np.float32)
 
 # Preprocess literals
 
@@ -99,6 +102,7 @@ X_lit_mov = standardize(X_lit_mov, mean_mov, std_mov)
 # Preload literals for validation
 X_lit_usr_val = X_lit_usr[X_val[:, 0]]
 X_lit_mov_val = X_lit_mov[X_val[:, 2]]
+X_lit_img_val = X_lit_img[X_val[:, 2]]  # Features of movies' posters
 
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
@@ -158,9 +162,14 @@ for epoch in range(n_epoch):
 
         X_lit_usr_mb = X_lit_usr[X_train_mb[:, 0]]
         X_lit_mov_mb = X_lit_mov[X_train_mb[:, 2]]
+        X_lit_img_mb = X_lit_img[X_train_mb[:, 2]]
 
         # Training step
-        y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb)
+        if args.use_image_lit:
+            y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb, X_lit_img_mb)
+        else:
+            y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb)
+
         y_pos, y_neg = y[:m], y[m:]
 
         loss = model.ranking_loss(
