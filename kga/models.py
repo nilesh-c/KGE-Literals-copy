@@ -575,7 +575,7 @@ class RESCAL_literal(Model):
 
         return out
 
-    def predict(self, X, s_lit, o_lit, sigmoid=False):
+    def predict(self, X, s_lit, o_lit, sigmoid=True):
         """
         Predict the score of test batch.
 
