@@ -54,6 +54,8 @@ parser.add_argument('--use_movie_lit', default=False, action='store_true',
                     help='whether to use movies literals (default: False)')
 parser.add_argument('--use_image_lit', default=False, action='store_true',
                     help='whether to use images literals (default: False)')
+parser.add_argument('--use_text_lit', default=False, action='store_true',
+                    help='whether to use texts literals (default: False)')
 
 args = parser.parse_args()
 
@@ -83,6 +85,7 @@ X_val = np.load('data/ml-100k/bin/rating_val.npy')
 X_lit_usr = np.load('data/ml-100k/bin/user_literals.npy').astype(np.float32)
 X_lit_mov = np.load('data/ml-100k/bin/movie_literals.npy').astype(np.float32)
 X_lit_img = np.load('data/ml-100k/bin/image_literals.npy').astype(np.float32)
+X_lit_txt = np.load('data/ml-100k/bin/text_literals.npy').astype(np.float32)
 
 # Preprocess literals
 
@@ -103,6 +106,7 @@ X_lit_mov = standardize(X_lit_mov, mean_mov, std_mov)
 X_lit_usr_val = X_lit_usr[X_val[:, 0]]
 X_lit_mov_val = X_lit_mov[X_val[:, 2]]
 X_lit_img_val = X_lit_img[X_val[:, 2]]  # Features of movies' posters
+X_lit_txt_val = X_lit_txt[X_val[:, 2]]  # Features of movies' titles
 
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
@@ -116,7 +120,8 @@ lam = args.embeddings_lambda
 C = args.negative_samples
 
 # Initialize model
-model = ERLMLP_MovieLens(n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, args.use_gpu)
+model = ERLMLP_MovieLens(n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, args.use_gpu,
+                         args.use_image_lit, args.use_text_lit)
 
 # Training params
 lr = args.lr
@@ -163,12 +168,10 @@ for epoch in range(n_epoch):
         X_lit_usr_mb = X_lit_usr[X_train_mb[:, 0]]
         X_lit_mov_mb = X_lit_mov[X_train_mb[:, 2]]
         X_lit_img_mb = X_lit_img[X_train_mb[:, 2]]
+        X_lit_txt_mb = X_lit_txt[X_train_mb[:, 2]]
 
         # Training step
-        if args.use_image_lit:
-            y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb, X_lit_img_mb)
-        else:
-            y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb)
+        y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb, X_lit_img_mb, X_lit_txt_mb)
 
         y_pos, y_neg = y[:m], y[m:]
 
@@ -188,7 +191,8 @@ for epoch in range(n_epoch):
         # Training logs
         if it % print_every == 0:
             mrr, hits = eval_embeddings_rel(model, X_val, n_rat, 1,
-                                            X_lit_usr_val, X_lit_mov_val)
+                                            X_lit_usr_val, X_lit_mov_val,
+                                            X_lit_img_val, X_lit_txt_val)
 
             # For TransE, show loss, mrr & hits@10
             print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
