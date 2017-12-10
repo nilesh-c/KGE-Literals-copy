@@ -289,7 +289,7 @@ class ERLMLP_MovieLens(Model):
     --------------------------------------------------
     """
 
-    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False, img_lit=False):
+    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False, img_lit=False, txt_lit=False):
         """
         ERL-MLP: Entity-Relation-Literal MLP for MovieLens
         --------------------------------------------------
@@ -328,15 +328,20 @@ class ERLMLP_MovieLens(Model):
         self.k = k
         self.h_dim = h_dim
         self.img_lit = img_lit
+        self.txt_lit = txt_lit
 
         # Nets
         self.emb_usr = nn.Embedding(n_usr, k)
         self.emb_mov = nn.Embedding(n_mov, k)
         self.emb_rat = nn.Embedding(n_rat, k)
 
+        self.emb_img = nn.Linear(512, self.k)
+        self.emb_txt = nn.Linear(384, self.k)
+
         # Image embeddings
-        if img_lit:
-            self.emb_img = nn.AdaptiveAvgPool1d(self.k)
+        if img_lit and txt_lit:
+            n_input = 5*k+n_usr_lit+n_mov_lit
+        elif img_lit or txt_lit:
             n_input = 4*k+n_usr_lit+n_mov_lit
         else:
             n_input = 3*k+n_usr_lit+n_mov_lit
@@ -354,7 +359,7 @@ class ERLMLP_MovieLens(Model):
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, X_lit_usr, X_lit_mov, X_lit_img=None):
+    def forward(self, X, X_lit_usr, X_lit_mov, X_lit_img=None, X_lit_txt=None):
         """
         Given a (mini)batch of triplets X of size M, predict the validity.
 
@@ -385,22 +390,33 @@ class ERLMLP_MovieLens(Model):
             o = Variable(torch.from_numpy(o).cuda())
             X_lit_usr = Variable(torch.from_numpy(X_lit_usr).cuda())
             X_lit_mov = Variable(torch.from_numpy(X_lit_mov).cuda())
+            X_lit_img = Variable(torch.from_numpy(X_lit_img).cuda())
+            X_lit_txt = Variable(torch.from_numpy(X_lit_txt).cuda())
         else:
             s = Variable(torch.from_numpy(s))
             r = Variable(torch.from_numpy(r))
             o = Variable(torch.from_numpy(o))
             X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
             X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
+            X_lit_img = Variable(torch.from_numpy(X_lit_img))
+            X_lit_txt = Variable(torch.from_numpy(X_lit_txt))
 
         # Project to embedding, each is M x k
         e_usr = self.emb_usr(s)
         e_rat = self.emb_rat(r)
         e_mov = self.emb_mov(o)
 
-        if self.img_lit and X_lit_img is not None:
+        if self.img_lit and self.txt_lit:
             # Project image features to embedding of M x k
-            e_img = self.emb_img(X_lit_img.view(M, 1, -1))
+            e_img = self.emb_img(X_lit_img)
+            e_txt = self.emb_txt(X_lit_txt)
+            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_img, e_txt], 1)
+        elif self.img_lit:
+            e_img = self.emb_img(X_lit_img)
             phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_img], 1)
+        elif self.txt_lit:
+            e_txt = self.emb_txt(X_lit_txt)
+            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_txt], 1)
         else:
             phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov], 1)
 
@@ -408,11 +424,8 @@ class ERLMLP_MovieLens(Model):
 
         return score
 
-    def predict(self, X, X_lit_usr, X_lit_mov, X_lit_img=None):
-        if self.img_lit and X_lit_img is not None:
-            y_pred = self.forward(X, X_lit_usr, X_lit_mov, X_lit_img).view(-1, 1)
-        else:
-            y_pred = self.forward(X, X_lit_usr, X_lit_mov).view(-1, 1)
+    def predict(self, X, X_lit_usr, X_lit_mov, X_lit_img=None, X_lit_txt=None):
+        y_pred = self.forward(X, X_lit_usr, X_lit_mov, X_lit_img, X_lit_txt).view(-1, 1)
 
         if self.gpu:
             return y_pred.cpu().data.numpy()
