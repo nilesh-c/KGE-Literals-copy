@@ -79,6 +79,5 @@ for i, (input, path) in enumerate(img_loader):
     print(i)
 
 # Save features
-features = np.vstack(features)
 print('Saving features of size {}'.format(features.shape))
 np.save('data/yago3-10-literal/bin/image_literals.npy', features)

@@ -8,5 +8,5 @@ In this repository, we only do preprocessing based on those.
 
 ## Preprocessed data
 * KG and numerical data: inside `bin` directory
-* Text: https://drive.google.com/file/d/1v5J0xLUHsKU99xGeX_pdzbKN4Ru2Rx9v/view?usp=sharing
-* Images: will be added later
+* Text: https://drive.google.com/open?id=1v5J0xLUHsKU99xGeX_pdzbKN4Ru2Rx9v
+* Images: https://drive.google.com/open?id=1k3GGX5yYXZYEzFhTqwE1ePuC6rIdbNyW
