@@ -82,9 +82,9 @@ if __name__ == "__main__":
             except ValueError:
                 continue
         if i==0:
-            f = open('../data/fb15k-literal/train_subject_string_triples.txt','w')    
+            f = open('../data/fb15k-literal/train_subject_numerical_triples.txt','w')    
         else:            
-            f = open('../data/fb15k-literal/train_subject_string_triples.txt','a')    
+            f = open('../data/fb15k-literal/train_subject_numerical_triples.txt','a')    
         for triple in numerical_literaltriples:
             triple = '\t'.join(en for en in triple)
             f.write(triple +'\n')
@@ -104,9 +104,9 @@ if __name__ == "__main__":
             except ValueError:
                 continue
         if i==0:
-            f1 = open('../data/fb15k-literal/train_subject_numerical_triples.txt','w')    
+            f1 = open('../data/fb15k-literal/train_object_numerical_triples.txt','w')    
         else:            
-            f1 = open('../data/fb15k-literal/train_subject_numerical_triples.txt','a')    
+            f1 = open('../data/fb15k-literal/train_object_numerical_triples.txt','a')    
         for triple in numerical_literaltriples:
             triple = '\t'.join(en for en in triple)
             f1.write(triple +'\n')
