@@ -58,7 +58,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     n_e: int
         Number of entities in dataset.
 
-    k: int
+    k: int or list
         Max rank to be considered, i.e. to be used in Hits@k metric.
 
     n_sample: int, default: 1000
@@ -75,7 +75,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     mrr: float
         Mean Reciprocal Rank.
 
-    hitsk: float
+    hitsk: float or list
         Hits@k.
     """
     M = X_test.shape[0]
@@ -127,7 +127,11 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     ranks_t = np.array([st.rankdata(s)[0] for s in scores_t])
 
     mrr = (np.mean(1/ranks_h) + np.mean(1/ranks_t)) / 2
-    hitsk = (np.mean(ranks_h <= k) + np.mean(ranks_t <= k)) / 2
+
+    if isinstance(k, list):
+        hitsk = [(np.mean(ranks_h <= r) + np.mean(ranks_t <= r)) / 2 for r in k]
+    else:
+        hitsk = (np.mean(ranks_h <= k) + np.mean(ranks_t <= k)) / 2
 
     return mrr, hitsk
 
@@ -148,7 +152,7 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     n_e: int
         Number of entities in dataset.
 
-    k: int
+    k: int or list
         Max rank to be considered, i.e. to be used in Hits@k metric.
 
     X_lit_s: M x n_l_s matrix
@@ -163,7 +167,7 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     mrr: float
         Mean Reciprocal Rank.
 
-    hitsk: float
+    hitsk: float or list
         Hits@k.
     """
     M = X_test.shape[0]
@@ -194,7 +198,11 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     )
 
     mrr = np.mean(1/ranks_r)
-    hitsk = np.mean(ranks_r <= k)
+
+    if isinstance(k, list):
+        hitsk = [np.mean(ranks_r <= r) for r in k]
+    else:
+        hitsk = np.mean(ranks_r <= k)
 
     return mrr, hitsk
 
