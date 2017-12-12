@@ -104,3 +104,6 @@ ENV/
 models/
 
 image/
+data/yago3-10-literal/bin/text_literals.npy
+data/yago3-10-literal/bin/image_literals.npy
+

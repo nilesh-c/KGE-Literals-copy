@@ -11,6 +11,7 @@ from torchvision import datasets
 
 import os
 import argparse
+import unicodedata
 
 
 parser = argparse.ArgumentParser(description='Feature extractor for image literals')
@@ -49,8 +50,6 @@ normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
 
 img_loader = torch.utils.data.DataLoader(
     CustomImageFolder(img_dir, transforms.Compose([
-        # transforms.Scale(256),
-        # transforms.CenterCrop(224),
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         normalize,
@@ -60,17 +59,19 @@ img_loader = torch.utils.data.DataLoader(
 
 model.eval()
 
-imgs = [int(x[0][-9:-4])-1 for x in img_loader.dataset.imgs]
-features = np.zeros([np.max(imgs)+1, 512], np.float32)
+# Lookups
+idx2ent = np.load('data/yago3-10-literal/bin/idx2ent.npy')
+ent2idx = {e: idx for idx, e in enumerate(idx2ent)}
 
+features = np.zeros([len(idx2ent), 512], np.float32)
 print(features.shape)
 
 for i, (input, path) in enumerate(img_loader):
     input_var = Variable(input, volatile=True)
     output = model(input_var).view(-1, 512).data.numpy()
 
-    # From filename to index: minus 1
-    idxs = [int(x[-9:-4])-1 for x in path]
+    # From filename to index: normalize string encoding first
+    idxs = [ent2idx[unicodedata.normalize('NFC', x[32:-4] if x[32:-4] != 'Karl_Weierstraß-1' else 'Karl_Weierstraß')] for x in path]
 
     # Populate array
     features[idxs, :] = output
@@ -78,6 +79,5 @@ for i, (input, path) in enumerate(img_loader):
     print(i)
 
 # Save features
-features = np.vstack(features)
 print('Saving features of size {}'.format(features.shape))
-np.save('data/ml-100k/bin/image_literals.npy', features)
+np.save('data/yago3-10-literal/bin/image_literals.npy', features)
