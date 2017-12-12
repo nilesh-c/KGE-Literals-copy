@@ -9,7 +9,7 @@ import pdb
 ############################################################
 
 class Querier(object):
-    def __init__(self, address="http://drogon:9890/sparql", **kw):
+    def __init__(self, address="http://drogon:8890/sparql", **kw):
         # address = "http://localhost:9890/sparql"        # TODO remote testing
         super(Querier, self).__init__(**kw)
         self.sparql = SPARQLWrapper(address)
@@ -39,7 +39,7 @@ class Querier(object):
         query = """SELECT DISTINCT ?p ?o WHERE {{
             {} ?p ?o .
             {}
-        }}""".format(entity, "FILTER (isLiteral(?o) && langMatches(lang(?o), '{}')))".format(language) if language is not None else "")
+        }}""".format(entity, "FILTER (isLiteral(?o) && langMatches(lang(?o), '{}'))".format(language) if language is not None else "")
         res = self._exec_query(query)
         results = res["results"]["bindings"]
         alltriples = []
@@ -63,7 +63,7 @@ class Querier(object):
 
 if __name__ == "__main__":
 
-    filename = 'data/fb15k/freebase_mtr100_mte100-test.txt'
+    filename = '../data/fb15k/freebase_mtr100_mte100-train.txt'
     data = pd.read_csv(filename, header=None, sep='\t') 
     subject_ = list(set(data[0].values))
     object_ = list(set(data[2].values))    
@@ -72,20 +72,12 @@ if __name__ == "__main__":
     for i, entity in enumerate(subject_):
         entity = entity[1:].replace('/','.')
         print('Querying for entity {}'.format(entity))
-        alltriples, uritriples, literaltriples = que.get_triples_of("<http://rdf.freebase.com/ns/"+ entity+">")
-        print('Extracting Numerical Attributes for entity {}'.format(entity))
-        numerical_literaltriples = []
-        for triple in literaltriples:
-            try:
-                literal = float(triple[2])
-                numerical_literaltriples.append(triple)
-            except ValueError:
-                continue
+        alltriples, uritriples, string_literaltriples = que.get_triples_of("<http://rdf.freebase.com/ns/"+ entity+">", language='EN')
         if i==0:
-            f = open('../data/fb15k-literal/train_subject_numerical_triples.txt','w')    
+            f = open('../data/fb15k-literal/subject_string_triples.txt','w')    
         else:            
-            f = open('../data/fb15k-literal/train_subject_numerical_triples.txt','a')    
-        for triple in numerical_literaltriples:
+            f = open('../data/fb15k-literal/subject_string_triples.txt','a')    
+        for triple in string_literaltriples:
             triple = '\t'.join(en for en in triple)
             f.write(triple +'\n')
     f.close()
@@ -94,20 +86,12 @@ if __name__ == "__main__":
     for i, entity in enumerate(object_):
         entity = entity[1:].replace('/','.')
         print('Querying for entity {}'.format(entity))
-        alltriples, uritriples, literaltriples = que.get_triples_of("<http://rdf.freebase.com/ns/"+ entity+">")
-        print('Extracting Numerical Attributes for entity {}'.format(entity))
-        numerical_literaltriples = []
-        for triple in literaltriples:
-            try:
-                literal = float(triple[2])
-                numerical_literaltriples.append(triple)
-            except ValueError:
-                continue
+        alltriples, uritriples, string_literaltriples = que.get_triples_of("<http://rdf.freebase.com/ns/"+ entity+">", language='EN')
         if i==0:
-            f1 = open('../data/fb15k-literal/train_object_numerical_triples.txt','w')    
+            f1 = open('../data/fb15k-literal/object_string_triples.txt','w')    
         else:            
-            f1 = open('../data/fb15k-literal/train_object_numerical_triples.txt','a')    
-        for triple in numerical_literaltriples:
+            f1 = open('../data/fb15k-literal/object_string_triples.txt','a')    
+        for triple in string_literaltriples:
             triple = '\t'.join(en for en in triple)
             f1.write(triple +'\n')
     f1.close()    
