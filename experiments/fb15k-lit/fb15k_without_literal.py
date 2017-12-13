@@ -12,8 +12,9 @@ from sklearn.utils import shuffle as skshuffle
 import pdb
 from scipy.sparse import load_npz
 
-C = 5 #negative samples
-nepoch = 20
+k = 50
+C = 5 # Negative Samples
+n_epoch = 20
 average_loss = False
 lr = 0.01
 lr_decay_every = 20
@@ -25,7 +26,7 @@ checkpoint_dir = 'models/'
 resume = False
 use_gpu = True
 randseed = 9999
-mbsize = 100
+mb_size = 50
 loss_type = 'rankloss'
 # Set random seed
 np.random.seed(randseed)
@@ -55,16 +56,14 @@ n_l = train_literal_s.shape[1]
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
- 
 # Initialize model
 #model = DistMult_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
-embedding_size = 50
-model = RESCAL_literal(n_e, n_r, n_l, embedding_size, lam=embeddings_lambda, gpu=use_gpu)
+model = RESCAL(n_e, n_r, k, lam=embeddings_lambda, gpu=use_gpu)
+n_l = 0
+#model = ERLMLP(n_e, n_r, n_l, k, h_dim=128)
 # Training params
 #solver = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
 solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-n_epoch = nepoch
-mb_size = mbsize  # 2x with negative sampling
 checkpoint_dir = '{}/fb-15k'.format(checkpoint_dir.rstrip('/'))
 checkpoint_path = '{}/rescal_rank.bin'.format(checkpoint_dir)
 
@@ -99,19 +98,18 @@ for epoch in range(n_epoch):
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
-        train_literal_s_mb = train_literal_s[X_train_mb[:,0]]
-        train_literal_o_mb = train_literal_o[X_train_mb[:,2]]
         if loss_type =='logloss':
-            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb)       
+            X_train_mb, y_true_mb = skshuffle(X_train_mb, y_true_mb)
         # Training step
-        y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb)
+        y = model.forward(X_train_mb)
+
         if loss_type == 'rankloss':
             y_pos, y_neg = y[:m], y[m:]
             loss = model.ranking_loss(
                 y_pos, y_neg, margin=1, C=C, average=average_loss
             )
-        elif loss_type =='logloss':
-            loss = model.log_loss(y, y_true_mb, average=average_loss)
+        elif loss_type == 'logloss':
+            loss = model.log_loss(y, y_true_mb, average=average_loss)            
         loss.backward()
         solver.step()
         solver.zero_grad()
@@ -122,8 +120,8 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            if loss_type =='logloss':
-                pred = model.predict(X_train_mb, val_literal_s, val_literal_o, sigmoid=True)
+            if loss_type == 'logloss':
+                pred = model.predict(X_train_mb, sigmoid=True)
                 train_acc = accuracy(pred, y_true_mb)
                 # Per class training accuracy
                 pos_acc = accuracy(pred[:m], y_true_mb[:m])
@@ -144,12 +142,10 @@ for epoch in range(n_epoch):
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
                       .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss.data[0], end-start))
             else:
-                n_sample = 100
-                k = 10
-                mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o)
-            # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mrr, hits10, end-start))
+                mrr, hits10 = eval_embeddings(model, X_val, n_e, k=10, n_sample=100)
+                # For TransE, show loss, mrr & hits@10
+                print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
+                      .format(it, loss.data[0], mrr, hits10, end-start))
 
         it += 1
 

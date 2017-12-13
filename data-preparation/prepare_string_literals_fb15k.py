@@ -10,7 +10,7 @@ filename = '../data/fb15k-literal/fb15k_string_triples.txt'
 triples = [line.strip().split('\t') for line in open(filename,'r')]
 all_predicate = list(zip(*triples))
 predicate_freq = Counter(all_predicate)
-
+length =[len(triple) for triple in triples]
 predicate_ = list(set(all_predicate))
 
 with open('../data/fb15k-literal/frequency-count-string.txt','w') as f:
