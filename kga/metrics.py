@@ -42,7 +42,7 @@ def auc(y_pred, y_true):
     return roc_auc_score(y_true, y_pred)
 
 
-def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
+def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None, X_lit_img=None, X_lit_txt=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model.
     The procedure follows Bordes, et. al., 2011.
@@ -94,7 +94,16 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     else:
         X_lit_s_ori = X_lit[X_test[:, 0]]
         X_lit_o_ori = X_lit[X_test[:, 2]]
-        y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori).ravel()
+        # Image lit
+        X_lit_s_img_ori = X_lit_img[X_test[:, 0]]
+        X_lit_o_img_ori = X_lit_img[X_test[:, 2]]
+        # Text lit
+        X_lit_s_txt_ori = X_lit_txt[X_test[:, 0]]
+        X_lit_o_txt_ori = X_lit_txt[X_test[:, 2]]
+
+        y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori, X_lit_s_img_ori,
+                          X_lit_o_img_ori, X_lit_s_txt_ori, X_lit_o_txt_ori)
+        y = y.ravel()
 
     scores_h[:, 0] = y
     scores_t[:, 0] = y
@@ -117,8 +126,17 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
         else:
             X_lit_s = X_lit[X_corr_h[:, 0]]
             X_lit_o = X_lit[X_corr_t[:, 2]]
-            y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori).ravel()
-            y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o).ravel()
+            X_lit_s_img = X_lit_img[X_corr_h[:, 0]]
+            X_lit_o_img = X_lit_img[X_corr_t[:, 2]]
+            X_lit_s_txt = X_lit_txt[X_corr_h[:, 0]]
+            X_lit_o_txt = X_lit_txt[X_corr_t[:, 2]]
+
+            y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori,
+                                X_lit_s_img, X_lit_o_img_ori,
+                                X_lit_s_txt, X_lit_o_txt_ori).ravel()
+            y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o,
+                                X_lit_s_img_ori, X_lit_o_img,
+                                X_lit_s_txt_ori, X_lit_o_txt).ravel()
 
         scores_h[:, idx] = y_h
         scores_t[:, idx] = y_t

@@ -52,6 +52,10 @@ parser.add_argument('--use_user_lit', default=False, type=bool, metavar='',
                     help='whether to use users literals (default: False)')
 parser.add_argument('--use_movie_lit', default=False, type=bool, metavar='',
                     help='whether to use movies literals (default: False)')
+parser.add_argument('--use_image_lit', default=False, action='store_true',
+                    help='whether to use images literals (default: False)')
+parser.add_argument('--use_text_lit', default=False, action='store_true',
+                    help='whether to use texts literals (default: False)')
 
 args = parser.parse_args()
 
@@ -77,6 +81,8 @@ X_val = np.load('data/yago3-10-literal/bin/val.npy').astype(int)
 
 # Load literals
 X_lit = np.load('data/yago3-10-literal/bin/numerical_literals.npy').astype(np.float32)
+X_lit_img = np.load('data/yago3-10-literal/bin/image_literals.npy').astype(np.float32)
+X_lit_txt = np.load('data/yago3-10-literal/bin/text_literals.npy').astype(np.float32)
 
 # Preprocess literals
 
@@ -92,6 +98,10 @@ X_lit = standardize(X_lit, mean, std)
 # Preload literals for validation
 X_lit_s_val = X_lit[X_val[:, 0]]
 X_lit_o_val = X_lit[X_val[:, 2]]
+X_lit_s_img_val = X_lit_img[X_val[:, 0]]
+X_lit_o_img_val = X_lit_img[X_val[:, 2]]
+X_lit_s_txt_val = X_lit_txt[X_val[:, 0]]
+X_lit_o_txt_val = X_lit_txt[X_val[:, 2]]
 
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
@@ -104,7 +114,7 @@ lam = args.embeddings_lambda
 C = args.negative_samples
 
 # Initialize model
-model = ERLMLP(n_ent, n_rel, n_lit, k, h_dim, args.use_gpu)
+model = ERLMLP(n_ent, n_rel, n_lit, k, h_dim, args.use_gpu, args.use_image_lit, args.use_text_lit)
 
 # Training params
 lr = args.lr
@@ -148,11 +158,19 @@ for epoch in range(n_epoch):
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
+        # Numerical lit
         X_lit_s_mb = X_lit[X_train_mb[:, 0]]
         X_lit_o_mb = X_lit[X_train_mb[:, 2]]
+        # Image lit
+        X_lit_s_img_mb = X_lit_img[X_train_mb[:, 0]]
+        X_lit_o_img_mb = X_lit_img[X_train_mb[:, 2]]
+        # Text lit
+        X_lit_s_txt_mb = X_lit_txt[X_train_mb[:, 0]]
+        X_lit_o_txt_mb = X_lit_txt[X_train_mb[:, 2]]
 
         # Training step
-        y = model.forward(X_train_mb, X_lit_s_mb, X_lit_o_mb)
+        y = model.forward(X_train_mb, X_lit_s_mb, X_lit_o_mb, X_lit_s_img_mb,
+                          X_lit_o_img_mb, X_lit_s_txt_mb, X_lit_o_img_mb)
         y_pos, y_neg = y[:m], y[m:]
 
         loss = model.ranking_loss(
@@ -172,7 +190,8 @@ for epoch in range(n_epoch):
         if it % print_every == 0:
             hits_ks = [1, 3, 10]
 
-            mrr, hits = eval_embeddings(model, X_val, n_ent, hits_ks, n_sample=1000, X_lit=X_lit)
+            mrr, hits = eval_embeddings(model, X_val, n_ent, hits_ks, 1000,
+                                        X_lit, X_lit_img, X_lit_txt)
 
             hits1, hits3, hits10 = hits
 
