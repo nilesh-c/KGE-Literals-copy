@@ -84,9 +84,16 @@ n_r = len(idx2rel)
 # Load dataset
 X_train = np.load('data/{}/bin/train.npy'.format(args.dataset))
 X_val = np.load('data/{}/bin/val.npy'.format(args.dataset))
-y_val = np.load('data/{}/bin/y_val.npy'.format(args.dataset))
 
-X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
+try:
+    y_val = np.load('data/{}/bin/y_val.npy'.format(args.dataset))
+    X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
+except:
+    X_val_pos = X_val
+
+    if args.loss == 'logloss':
+        print('Cannot use logloss as y_val is not found, reverting to rankloss')
+        args.loss = 'rankloss'
 
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
@@ -203,7 +210,7 @@ for epoch in range(n_epoch):
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
                       .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss.data[0], end-start))
             else:
-                mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10)
+                mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10, n_sample=100)
 
                 # For TransE, show loss, mrr & hits@10
                 print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
