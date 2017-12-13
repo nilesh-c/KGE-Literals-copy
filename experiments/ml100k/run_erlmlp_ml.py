@@ -190,13 +190,21 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            mrr, hits = eval_embeddings_rel(model, X_val, n_rat, 1,
+            model.eval()
+
+            hits_ks = [1, 2]
+
+            mrr, hits = eval_embeddings_rel(model, X_val, n_rat, hits_ks,
                                             X_lit_usr_val, X_lit_mov_val,
                                             X_lit_img_val, X_lit_txt_val)
 
+            hits1, hits2 = hits
+
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mrr, hits, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f} time per batch: {:.2f}s'
+                  .format(it, loss.data[0], mrr, hits1, hits2, end-start))
+
+            model.train()
 
         it += 1
 

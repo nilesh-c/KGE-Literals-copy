@@ -42,7 +42,7 @@ def auc(y_pred, y_true):
     return roc_auc_score(y_true, y_pred)
 
 
-def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
+def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None, X_lit_img=None, X_lit_txt=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model.
     The procedure follows Bordes, et. al., 2011.
@@ -58,7 +58,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     n_e: int
         Number of entities in dataset.
 
-    k: int
+    k: int or list
         Max rank to be considered, i.e. to be used in Hits@k metric.
 
     n_sample: int, default: 1000
@@ -75,7 +75,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     mrr: float
         Mean Reciprocal Rank.
 
-    hitsk: float
+    hitsk: float or list
         Hits@k.
     """
     M = X_test.shape[0]
@@ -94,7 +94,16 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     else:
         X_lit_s_ori = X_lit[X_test[:, 0]]
         X_lit_o_ori = X_lit[X_test[:, 2]]
-        y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori).ravel()
+        # Image lit
+        X_lit_s_img_ori = X_lit_img[X_test[:, 0]]
+        X_lit_o_img_ori = X_lit_img[X_test[:, 2]]
+        # Text lit
+        X_lit_s_txt_ori = X_lit_txt[X_test[:, 0]]
+        X_lit_o_txt_ori = X_lit_txt[X_test[:, 2]]
+
+        y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori, X_lit_s_img_ori,
+                          X_lit_o_img_ori, X_lit_s_txt_ori, X_lit_o_txt_ori)
+        y = y.ravel()
 
     scores_h[:, 0] = y
     scores_t[:, 0] = y
@@ -117,8 +126,17 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
         else:
             X_lit_s = X_lit[X_corr_h[:, 0]]
             X_lit_o = X_lit[X_corr_t[:, 2]]
-            y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori).ravel()
-            y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o).ravel()
+            X_lit_s_img = X_lit_img[X_corr_h[:, 0]]
+            X_lit_o_img = X_lit_img[X_corr_t[:, 2]]
+            X_lit_s_txt = X_lit_txt[X_corr_h[:, 0]]
+            X_lit_o_txt = X_lit_txt[X_corr_t[:, 2]]
+
+            y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori,
+                                X_lit_s_img, X_lit_o_img_ori,
+                                X_lit_s_txt, X_lit_o_txt_ori).ravel()
+            y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o,
+                                X_lit_s_img_ori, X_lit_o_img,
+                                X_lit_s_txt_ori, X_lit_o_txt).ravel()
 
         scores_h[:, idx] = y_h
         scores_t[:, idx] = y_t
@@ -127,7 +145,11 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit=None):
     ranks_t = np.array([st.rankdata(s)[0] for s in scores_t])
 
     mrr = (np.mean(1/ranks_h) + np.mean(1/ranks_t)) / 2
-    hitsk = (np.mean(ranks_h <= k) + np.mean(ranks_t <= k)) / 2
+
+    if isinstance(k, list):
+        hitsk = [(np.mean(ranks_h <= r) + np.mean(ranks_t <= r)) / 2 for r in k]
+    else:
+        hitsk = (np.mean(ranks_h <= k) + np.mean(ranks_t <= k)) / 2
 
     return mrr, hitsk
 
@@ -148,7 +170,7 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     n_e: int
         Number of entities in dataset.
 
-    k: int
+    k: int or list
         Max rank to be considered, i.e. to be used in Hits@k metric.
 
     X_lit_s: M x n_l_s matrix
@@ -163,7 +185,7 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     mrr: float
         Mean Reciprocal Rank.
 
-    hitsk: float
+    hitsk: float or list
         Hits@k.
     """
     M = X_test.shape[0]
@@ -194,7 +216,11 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     )
 
     mrr = np.mean(1/ranks_r)
-    hitsk = np.mean(ranks_r <= k)
+
+    if isinstance(k, list):
+        hitsk = [np.mean(ranks_r <= r) for r in k]
+    else:
+        hitsk = np.mean(ranks_r <= k)
 
     return mrr, hitsk
 

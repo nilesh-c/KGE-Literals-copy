@@ -170,7 +170,7 @@ class ERLMLP(Model):
     ---------------------------------------------------
     """
 
-    def __init__(self, n_ent, n_rel, n_lit, k, h_dim, gpu=False):
+    def __init__(self, n_ent, n_rel, n_lit, k, h_dim, gpu=False, img_lit=False, txt_lit=False):
         """
         ERL-MLP: Entity-Relation-Literal MLP for generic KG
         ---------------------------------------------------
@@ -206,13 +206,26 @@ class ERLMLP(Model):
         self.n_lit = n_lit
         self.k = k
         self.h_dim = h_dim
+        self.img_lit = img_lit
+        self.txt_lit = txt_lit
 
         # Nets
         self.emb_ent = nn.Embedding(n_ent, k)
         self.emb_rel = nn.Embedding(n_rel, k)
 
+        self.emb_img = nn.Linear(512, self.k)
+        self.emb_txt = nn.Linear(384, self.k)
+
+        # Image embeddings
+        if img_lit and txt_lit:
+            n_input = 7*k+2*n_lit  # 3k + 2k + 2k
+        elif img_lit or txt_lit:
+            n_input = 5*k+2*n_lit  # 3k + 2k
+        else:
+            n_input = 3*k+2*n_lit
+
         self.mlp = nn.Sequential(
-            nn.Linear(3*k+2*n_lit, h_dim),
+            nn.Linear(n_input, h_dim),
             nn.ReLU(),
             nn.Linear(h_dim, 1)
         )
@@ -224,7 +237,7 @@ class ERLMLP(Model):
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, X_lit_s, X_lit_o):
+    def forward(self, X, X_lit_s, X_lit_o, X_lit_s_img, X_lit_o_img, X_lit_s_txt, X_lit_o_txt):
         """
         Given a (mini)batch of triplets X of size M, predict the validity.
 
@@ -255,12 +268,20 @@ class ERLMLP(Model):
             o = Variable(torch.from_numpy(o).cuda())
             X_lit_s = Variable(torch.from_numpy(X_lit_s).cuda())
             X_lit_o = Variable(torch.from_numpy(X_lit_o).cuda())
+            X_lit_s_img = Variable(torch.from_numpy(X_lit_s_img).cuda())
+            X_lit_o_img = Variable(torch.from_numpy(X_lit_o_img).cuda())
+            X_lit_s_txt = Variable(torch.from_numpy(X_lit_s_txt).cuda())
+            X_lit_o_txt = Variable(torch.from_numpy(X_lit_o_txt).cuda())
         else:
             s = Variable(torch.from_numpy(s))
             r = Variable(torch.from_numpy(r))
             o = Variable(torch.from_numpy(o))
             X_lit_s = Variable(torch.from_numpy(X_lit_s))
             X_lit_o = Variable(torch.from_numpy(X_lit_o))
+            X_lit_s_img = Variable(torch.from_numpy(X_lit_s_img))
+            X_lit_o_img = Variable(torch.from_numpy(X_lit_o_img))
+            X_lit_s_txt = Variable(torch.from_numpy(X_lit_s_txt))
+            X_lit_o_txt = Variable(torch.from_numpy(X_lit_o_txt))
 
         # Project to embedding, each is M x k
         e_s = self.emb_ent(s)
@@ -269,12 +290,32 @@ class ERLMLP(Model):
 
         # Forward
         phi = torch.cat([e_s, e_r, e_o, X_lit_s, X_lit_o], 1)
+
+        if self.img_lit and self.txt_lit:
+            # Project image features to embedding of M x k
+            e_s_img = self.emb_img(X_lit_s_img)
+            e_o_img = self.emb_img(X_lit_o_img)
+            e_s_txt = self.emb_txt(X_lit_s_txt)
+            e_o_txt = self.emb_txt(X_lit_o_txt)
+            phi = torch.cat([e_s, e_r, e_o, X_lit_s, X_lit_o, e_s_img, e_o_img, e_s_txt, e_o_txt], 1)
+        elif self.img_lit:
+            e_s_img = self.emb_img(X_lit_s_img)
+            e_o_img = self.emb_img(X_lit_o_img)
+            phi = torch.cat([e_s, e_r, e_o, X_lit_s, X_lit_o, e_s_img, e_o_img], 1)
+        elif self.txt_lit:
+            e_s_txt = self.emb_txt(X_lit_s_txt)
+            e_o_txt = self.emb_txt(X_lit_o_txt)
+            phi = torch.cat([e_s, e_r, e_o, X_lit_s, X_lit_o, e_s_txt, e_o_txt], 1)
+        else:
+            phi = torch.cat([e_s, e_r, e_o, X_lit_s, X_lit_o], 1)
+
         score = self.mlp(phi)
 
         return score
 
-    def predict(self, X, X_lit_s, X_lit_o):
-        y_pred = self.forward(X, X_lit_s, X_lit_o).view(-1, 1)
+    def predict(self, X, X_lit_s, X_lit_o, X_lit_s_img, X_lit_o_img, X_lit_s_txt, X_lit_o_txt):
+        y_pred = self.forward(X, X_lit_s, X_lit_o, X_lit_s_img, X_lit_o_img,
+                              X_lit_s_txt, X_lit_o_txt).view(-1, 1)
 
         if self.gpu:
             return y_pred.cpu().data.numpy()
