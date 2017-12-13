@@ -648,7 +648,7 @@ class RESCAL_literal(Model):
 
         return out
 
-    def predict(self, X, s_lit, o_lit, sigmoid=True):
+    def predict(self, X, s_lit=None, o_lit=None, sigmoid=True):
         """
         Predict the score of test batch.
 
@@ -667,7 +667,10 @@ class RESCAL_literal(Model):
         --------
         y_pred: np.array of Mx1
         """
-        y_pred = self.forward(X, s_lit, o_lit).view(-1, 1)
+        if s_lit is None or o_lit is None:
+            y_pred = self.forward(X).view(-1, 1)
+        else:
+            y_pred = self.forward(X, s_lit, o_lit).view(-1, 1)
 
         if sigmoid:
             y_pred = F.sigmoid(y_pred)
