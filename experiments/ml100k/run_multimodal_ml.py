@@ -144,11 +144,11 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            mrr, hits10 = eval_embeddings_rel(model, X_val, n_r, k=1)
+            mr, mrr, hits10 = eval_embeddings_rel(model, X_val, n_r, k=1)
 
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mrr, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss.data[0], mr, mrr, hits10, end-start))
 
         it += 1
 

@@ -190,13 +190,13 @@ for epoch in range(n_epoch):
         if it % print_every == 0:
             hits_ks = [1, 3, 10]
 
-            mrr, hits = eval_embeddings(model, X_val, n_ent, hits_ks, 1000,
+            mr, mrr, hits = eval_embeddings(model, X_val, n_ent, hits_ks, 1000,
                                         X_lit, X_lit_img, X_lit_txt)
 
             hits1, hits3, hits10 = hits
 
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mrr, hits1, hits3, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss.data[0], mr, mrr, hits1, hits3, hits10, end-start))
 
         it += 1
 
