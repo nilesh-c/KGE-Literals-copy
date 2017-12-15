@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models import *
+from kga.models.base import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
