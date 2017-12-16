@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models.literals import *
+from kga.models import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
@@ -13,7 +13,7 @@ import pdb
 from scipy.sparse import load_npz
 
 C = 5 #negative samples
-nepoch = 20
+n_epoch = 20
 average_loss = False
 lr = 0.01
 lr_decay_every = 20
@@ -25,7 +25,8 @@ checkpoint_dir = 'models/'
 resume = False
 use_gpu = True
 randseed = 9999
-mbsize = 100
+mb_size = 100
+embedding_size = 50
 loss_type = 'rankloss'
 # Set random seed
 np.random.seed(randseed)
@@ -45,26 +46,47 @@ n_r = len(idx2relation)
 X_train = np.load('data/fb15k-literal/bin/train.npy')
 X_val = np.load('data/fb15k-literal/bin/val.npy')
 
-# Load Literals
+# Load Numerical Literals
 train_literal_s = load_npz('data/fb15k-literal/bin/train_literal_s.npz').todense().astype(np.float32)
 train_literal_o = load_npz('data/fb15k-literal/bin/train_literal_o.npz').todense().astype(np.float32)
 val_literal_s = load_npz('data/fb15k-literal/bin/val_literal_s.npz').todense().astype(np.float32)
 val_literal_o = load_npz('data/fb15k-literal/bin/val_literal_o.npz').todense().astype(np.float32)
 
+# Load Text Literals
+stringliteral_id = np.load('../data/fb15k-literal/entity2stringliteral.npy')
+stringliteral_reprsn = np.load('../data/fb15k-literal/entity_string_literal_reprsn.npy').astype('float32')
+
+# Split Text literals
+train_string_s = []
+train_string_o = []
+for triple in X_train:
+    train_string_s.append(stringliteral_reprsn[np.where(idx2entity[triple[0]]==stringliteral_id)[0],:])
+    train_string_o.append(stringliteral_reprsn[np.where(idx2entity[triple[2]]==stringliteral_id)[0],:])
+
+train_string_s = np.array(train_string_s).astype('float32')
+train_string_o = np.array(train_string_o).astype('float32')
+
+val_string_s = []
+val_string_o = []
+for triple in X_val:
+    val_string_s.append(stringliteral_reprsn[np.where(idx2entity[triple[0]]==stringliteral_id)[0],:])
+    val_string_o.append(stringliteral_reprsn[np.where(idx2entity[triple[2]]==stringliteral_id)[0],:])
+
+val_string_s = np.array(val_string_s).astype('float32')
+val_string_o = np.array(val_string_o).astype('float32')
+
 n_l = train_literal_s.shape[1]
+n_text = train_string_s.shape[1]
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
-
+ 
 # Initialize model
 #model = DistMult_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
-embedding_size = 50
-model = RESCAL_literal(n_e, n_r, n_l, embedding_size, lam=embeddings_lambda, gpu=use_gpu)
+model = RESCAL_literal(n_e, n_r, embedding_size, embeddings_lambda, n_l, n_text, gpu=use_gpu)
 # Training params
 #solver = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
 solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
-n_epoch = nepoch
-mb_size = mbsize  # 2x with negative sampling
 checkpoint_dir = '{}/fb-15k'.format(checkpoint_dir.rstrip('/'))
 checkpoint_path = '{}/rescal_rank.bin'.format(checkpoint_dir)
 
@@ -101,10 +123,13 @@ for epoch in range(n_epoch):
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
         train_literal_s_mb = train_literal_s[X_train_mb[:,0]]
         train_literal_o_mb = train_literal_o[X_train_mb[:,2]]
+        train_string_s_mb = train_string_s[X_train_mb[:,0]]
+        train_string_o_mb = train_string_o[X_train_mb[:,2]]
+        
         if loss_type =='logloss':
-            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb)
+            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_string_s_mb, train_string_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_string_s_mb, train_string_o_mb)       
         # Training step
-        y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb)
+        y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb, train_string_s_mb, train_string_o_mb)
         if loss_type == 'rankloss':
             y_pos, y_neg = y[:m], y[m:]
             loss = model.ranking_loss(
@@ -123,7 +148,7 @@ for epoch in range(n_epoch):
         # Training logs
         if it % print_every == 0:
             if loss_type =='logloss':
-                pred = model.predict(X_train_mb, val_literal_s, val_literal_o, sigmoid=True)
+                pred = model.predict(X_train_mb, val_literal_s, val_literal_o, val_string_s, val_string_o, sigmoid=True)
                 train_acc = accuracy(pred, y_true_mb)
                 # Per class training accuracy
                 pos_acc = accuracy(pred[:m], y_true_mb[:m])
@@ -146,15 +171,10 @@ for epoch in range(n_epoch):
             else:
                 n_sample = 100
                 k = 10
-                mr, mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o)
+                mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o, val_string_s, val_string_o)
             # For TransE, show loss, mrr & hits@10
-<<<<<<< HEAD
             print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
                   .format(it, loss.data[0], mrr, hits10, end-start))
-=======
-            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@{}: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mr, mrr, k, hits10, end-start))
->>>>>>> 6b2885dfd7dc2f5db46e300081ea80033b416b98
 
         it += 1
 
