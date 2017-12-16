@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models import *
+from kga.models.literals import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
@@ -55,7 +55,7 @@ n_l = train_literal_s.shape[1]
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
- 
+
 # Initialize model
 embedding_size = 50
 model = DistMult_literal(n_e, n_r, n_l, embedding_size, lam=embeddings_lambda, gpu=use_gpu)
@@ -101,7 +101,7 @@ for epoch in range(n_epoch):
         train_literal_s_mb = train_literal_s[X_train_mb[:,0]]
         train_literal_o_mb = train_literal_o[X_train_mb[:,2]]
         if loss_type =='logloss':
-            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb)       
+            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb)
         # Training step
         y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb)
         if loss_type == 'rankloss':
@@ -145,10 +145,10 @@ for epoch in range(n_epoch):
             else:
                 n_sample = 100
                 k = 10
-                mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o)
+                mr, mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o)
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mrr, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@{}: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss.data[0], mr, mrr, k, hits10, end-start))
 
         it += 1
 

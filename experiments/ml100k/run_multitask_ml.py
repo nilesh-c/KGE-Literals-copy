@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models import *
+from kga.models.baselines_literals import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
@@ -197,11 +197,11 @@ for epoch in range(n_epoch):
         # Training logs
         if it % print_every == 0:
             loss_total = loss_er + loss_lit
-            mrr, hits10 = eval_embeddings_rel(model, X_val, n_rat, 1)
+            mr, mrr, hits10 = eval_embeddings_rel(model, X_val, n_rat, 1)
 
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss_total.data[0], mrr, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss_total.data[0], mr, mrr, hits10, end-start))
 
         it += 1
 

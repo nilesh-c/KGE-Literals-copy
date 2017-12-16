@@ -95,13 +95,13 @@ ENV/
 .ropeproject
 
 # mkdocs documentation
-/site
+/sit
 
 # mypy
 .mypy_cache/
 
 .vscode
-models/
+/models/
 
 image/
 data/yago3-10-literal/bin/text_literals.npy

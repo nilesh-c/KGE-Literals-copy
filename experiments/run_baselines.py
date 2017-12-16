@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models import *
+from kga.models.base import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
@@ -210,11 +210,11 @@ for epoch in range(n_epoch):
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
                       .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss.data[0], end-start))
             else:
-                mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10, n_sample=100)
+                mr, mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10, n_sample=100)
 
                 # For TransE, show loss, mrr & hits@10
-                print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], mrr, hits10, end-start))
+                print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                      .format(it, loss.data[0], mr, mrr, hits10, end-start))
 
         it += 1
 
