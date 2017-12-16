@@ -562,7 +562,7 @@ class RESCAL_literal(Model):
     ICML. 2011.
     """
 
-    def __init__(self, n_e, n_r, n_l, k, lam, gpu=False):
+    def __init__(self, n_e, n_r, k, lam, n_l=None, n_text=None , gpu=False):
         """
         RESCAL: bilinear model
         ----------------------
@@ -593,8 +593,13 @@ class RESCAL_literal(Model):
         self.n_r = n_r
         self.k = k
         self.lam = lam
-        self.reprs_subject = nn.Linear(n_l, self.k)
-        self.reprs_object = nn.Linear(n_l, self.k)
+        if n_l != None:
+            self.reprs_subject = nn.Linear(n_l, self.k)
+            self.reprs_object = nn.Linear(n_l, self.k)
+
+        if n_text != None:
+            self.reprs_text_subject = nn.Linear(n_text, self.k)
+            self.reprs_text_object = nn.Linear(n_text, self.k)
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
@@ -611,7 +616,7 @@ class RESCAL_literal(Model):
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, s_lit, o_lit):
+    def forward(self, X, s_lit=None, o_lit=None, text_s=None, text_o=None):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
@@ -619,28 +624,45 @@ class RESCAL_literal(Model):
             hs = Variable(torch.from_numpy(hs).cuda())
             ls = Variable(torch.from_numpy(ls).cuda())
             ts = Variable(torch.from_numpy(ts).cuda())
-            s_lit = Variable(torch.from_numpy(s_lit).cuda())
-            o_lit = Variable(torch.from_numpy(o_lit).cuda())
+            if s_lit != None and o_lit != None:
+                s_lit = Variable(torch.from_numpy(s_lit).cuda())
+                o_lit = Variable(torch.from_numpy(o_lit).cuda())
+            if text_s != None and text_o != None:    
+                text_s = Variable(torch.from_numpy(text_s).cuda())
+                text_o = Variable(torch.from_numpy(text_o).cuda())
         else:
             hs = Variable(torch.from_numpy(hs))
             ls = Variable(torch.from_numpy(ls))
             ts = Variable(torch.from_numpy(ts))
-            s_lit = Variable(torch.from_numpy(s_lit))
-            o_lit = Variable(torch.from_numpy(o_lit))
-
+            if s_lit != None and o_lit != None:
+                s_lit = Variable(torch.from_numpy(s_lit))
+                o_lit = Variable(torch.from_numpy(o_lit))
+            if text_s != None and text_o != None:    
+                text_s = Variable(torch.from_numpy(text_s))
+                text_o = Variable(torch.from_numpy(text_o))
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        s_rep = self.reprs_subject(s_lit)
-        o_rep = self.reprs_object(o_lit)
-        e1_rep = torch.cat([e_hs, s_rep], 1)  # M x 2k
-        e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k
-
-        e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
-        e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
+        if s_lit != None and o_lit != None:
+            s_rep = self.reprs_subject(s_lit)
+            o_rep = self.reprs_object(o_lit)
+            e1_rep = torch.cat([e_hs, s_rep], 1)  # M x 2k
+            e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k            
+            e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
+            e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
+        
+        elif text_s != None and text_o != None:    
+            text_s_rep = self.reprs_subject(text_s)
+            text_o_rep = self.reprs_object(text_o)
+            e1_rep = torch.cat([e_hs, s_rep, text_s_rep], 1)  # M x 3k
+            e2_rep = torch.cat([e_ts, o_rep, text_o_rep], 1)  # M x 3k
+            e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
+            e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
+        else:
+            e1_rep = e_hs.view(-1, self.k, 1)
+            e2_rep = e_ts.view(-1, self.k, 1)
 
         W = self.emb_R(ls).view(-1, self.k, self.k)  # M x k x k
-
         # Forward
         out = torch.bmm(torch.transpose(e1_rep, 1, 2), W)  # h^T W
         out = torch.bmm(out, e2_rep)  # (h^T W) h
@@ -648,7 +670,7 @@ class RESCAL_literal(Model):
 
         return out
 
-    def predict(self, X, s_lit=None, o_lit=None, sigmoid=True):
+    def predict(self, X, s_lit=None, o_lit=None, text_s=None, text_o=None, sigmoid=True):
         """
         Predict the score of test batch.
 
@@ -667,11 +689,7 @@ class RESCAL_literal(Model):
         --------
         y_pred: np.array of Mx1
         """
-        if s_lit is None or o_lit is None:
-            y_pred = self.forward(X).view(-1, 1)
-        else:
-            y_pred = self.forward(X, s_lit, o_lit).view(-1, 1)
-
+        y_pred = self.forward(X, s_lit, o_lit, text_s, text_o).view(-1, 1)
         if sigmoid:
             y_pred = F.sigmoid(y_pred)
 
