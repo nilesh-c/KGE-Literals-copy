@@ -21,30 +21,36 @@ with open('../data/fb15k-literal/frequency-count-string.txt','w') as f:
 		f.write(pred + '\t' + str(freq) + '\n')
 
 nlp = spacy.load('en')
-
-# Prepare literal dataset
-text_literal_reprsn = {}
+# Filter literal Dataset
 filtered_triples = []			
 for triple in triples:
-	if 'http://rdf.freebase.com/ns/common.topic.description' in triple[1] or predicate_freq[triple[1]]>5:
+	if (('http://rdf.freebase.com/ns/common.topic.description' in triple[1] or predicate_freq[triple[1]]>5) and 'http://rdf.freebase.com/ns/common.topic.alias' not in triple[1]):
 		s_ = triple[0].replace('<http://rdf.freebase.com/ns/','')[:-1]
 		p_ = triple[1]
 		literal = triple[2]
 		literal = ' '.join(w for w in re.split(r"\W", literal) if w)
+		filtered_triples.append(triple)
+
+# Prepare literal dataset
+filtered_triples_transpose = list(zip(*filtered_triples))
+unique_entities = list(set(filtered_triples_transpose[0]))
+text_literal_reprsn = {entity:[] for entity in unique_entities}
+for triple in filtered_triples:
+		literal = triple[2]
 		if literal != 'unknown':
 			literal_reprsn = nlp(literal).vector
 		else:
 			literal_reprsn = np.zeros(384)
-		if s_ in text_literal_reprsn:
-			text_literal_reprsn[s_].append(literal_reprsn)
-		else:
-			text_literal_reprsn[s_] = [literal_reprsn]
-		filtered_triples.append(triple)
+		text_literal_reprsn[triple[0]].append(literal_reprsn)
 
 reprsn_text = []
 entity_ = []
 for entity,reprsn in text_literal_reprsn.items():
-	reprsn_text.append(np.average(np.array(reprsn), axis=0))
+	print(entity)
+	if len(reprsn)>1:
+		reprsn_text.append(np.average(np.array(reprsn), axis=0))
+	else:
+		reprsn_text.append(np.array(reprsn))
 	entity_.append(entity)
 reprsn_text = np.array(reprsn_text)
 np.save('../data/fb15k-literal/entity2stringliteral.npy', np.array(entity_))

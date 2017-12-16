@@ -21,7 +21,7 @@ def literal_subject_object(X, idx2literal, literal_data):
 	return X_literal_s, X_literal_o
 # Prepare training, validation and test file for literal dataset
 # Load Literal dataset
-literal_data = pd.read_csv('../data/fb15k-literal/entity_filtered_literal.csv')
+literal_data = pd.read_csv('../data/fb15k-literal/entity_numerical_literal.csv')
 idx2entity = np.load('../data/fb15k-literal/bin/idx2ent.npy')
 literal_data = literal_data.values
 entity_literal = literal_data[:,0]
