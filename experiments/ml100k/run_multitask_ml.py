@@ -160,8 +160,15 @@ for epoch in range(n_epoch):
         y_true_lit_usr = X_lit_usr[X_train_mb[:, 0], usr_attr]
         y_true_lit_mov = X_lit_mov[X_train_mb[:, 2], mov_attr]
 
-        y_true_lit_usr = Variable(torch.from_numpy(y_true_lit_usr))
-        y_true_lit_mov = Variable(torch.from_numpy(y_true_lit_mov))
+        if args.use_gpu:
+            y_true_lit_usr = torch.from_numpy(y_true_lit_usr).cuda()
+            y_true_lit_mov = torch.from_numpy(y_true_lit_mov).cuda()
+        else:
+            y_true_lit_usr = torch.from_numpy(y_true_lit_usr)
+            y_true_lit_mov = torch.from_numpy(y_true_lit_mov)
+
+        y_true_lit_usr = Variable(y_true_lit_usr)
+        y_true_lit_mov = Variable(y_true_lit_mov)
 
         # Training step
         y_er, y_lit_usr, y_lit_mov = model.forward(X_train_mb, usr_attr, mov_attr)
@@ -172,16 +179,14 @@ for epoch in range(n_epoch):
             y_er_pos, y_er_neg, margin=1, C=C, average=args.average_loss
         )
 
-        loss_er.backward()
-        solver.step()
-        solver.zero_grad()
-
         # Attribute nets update
         loss_lit_usr = F.mse_loss(y_lit_usr, y_true_lit_usr)
         loss_lit_mov = F.mse_loss(y_lit_mov, y_true_lit_mov)
         loss_lit = loss_lit_usr + loss_lit_mov
 
-        loss_lit.backward()
+        loss_total = loss_er + loss_lit
+
+        loss_total.backward()
         solver.step()
         solver.zero_grad()
 
@@ -192,8 +197,6 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            loss_total = loss_er + loss_lit
-
             model.eval()
 
             hits_ks = [1, 2]
