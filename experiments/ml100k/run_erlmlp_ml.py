@@ -121,6 +121,7 @@ C = args.negative_samples
 
 # Initialize model
 model = ERLMLP_MovieLens(n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, args.use_gpu,
+                         args.use_user_lit, args.use_movie_lit,
                          args.use_image_lit, args.use_text_lit)
 
 # Training params

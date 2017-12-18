@@ -18,7 +18,7 @@ class ERLMLP_MovieLens(Model):
     --------------------------------------------------
     """
 
-    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False, img_lit=False, txt_lit=False):
+    def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False, usr_lit=False, mov_lit=False, img_lit=False, txt_lit=False):
         """
         ERL-MLP: Entity-Relation-Literal MLP for MovieLens
         --------------------------------------------------
@@ -56,6 +56,8 @@ class ERLMLP_MovieLens(Model):
         self.n_mov_lit = n_mov_lit
         self.k = k
         self.h_dim = h_dim
+        self.usr_lit = usr_lit
+        self.mov_lit = mov_lit
         self.img_lit = img_lit
         self.txt_lit = txt_lit
 
@@ -67,13 +69,17 @@ class ERLMLP_MovieLens(Model):
         self.emb_img = nn.Linear(512, self.k)
         self.emb_txt = nn.Linear(384, self.k)
 
-        # Image embeddings
-        if img_lit and txt_lit:
-            n_input = 5*k+n_usr_lit+n_mov_lit
-        elif img_lit or txt_lit:
-            n_input = 4*k+n_usr_lit+n_mov_lit
-        else:
-            n_input = 3*k+n_usr_lit+n_mov_lit
+        # Determine MLP input size
+        n_input = 3*k
+
+        if usr_lit:
+            n_input += n_usr_lit
+        if mov_lit:
+            n_input += n_mov_lit
+        if img_lit:
+            n_input += k
+        if txt_lit:
+            n_input += k
 
         self.mlp = nn.Sequential(
             nn.Linear(n_input, h_dim),
@@ -135,19 +141,19 @@ class ERLMLP_MovieLens(Model):
         e_rat = self.emb_rat(r)
         e_mov = self.emb_mov(o)
 
-        if self.img_lit and self.txt_lit:
-            # Project image features to embedding of M x k
-            e_img = self.emb_img(X_lit_img)
-            e_txt = self.emb_txt(X_lit_txt)
-            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_img, e_txt], 1)
-        elif self.img_lit:
-            e_img = self.emb_img(X_lit_img)
-            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_img], 1)
-        elif self.txt_lit:
-            e_txt = self.emb_txt(X_lit_txt)
-            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov, e_txt], 1)
-        else:
-            phi = torch.cat([e_usr, e_rat, e_mov, X_lit_usr, X_lit_mov], 1)
+        e_img = self.emb_img(X_lit_img)
+        e_txt = self.emb_txt(X_lit_txt)
+
+        phi = torch.cat([e_usr, e_rat, e_mov], 1)
+
+        if self.usr_lit:
+            phi = torch.cat([phi, X_lit_usr], 1)
+        if self.mov_lit:
+            phi = torch.cat([phi, X_lit_mov], 1)
+        if self.img_lit:
+            phi = torch.cat([phi, e_img], 1)
+        if self.txt_lit:
+            phi = torch.cat([phi, e_txt], 1)
 
         score = self.mlp(phi)
 
