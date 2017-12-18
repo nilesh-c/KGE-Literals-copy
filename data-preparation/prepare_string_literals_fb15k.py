@@ -46,17 +46,17 @@ for triple in filtered_triples:
 reprsn_text = []
 entity_ = []
 for entity,reprsn in text_literal_reprsn.items():
-	print(entity)
 	if len(reprsn)>1:
 		reprsn_text.append(np.average(np.array(reprsn), axis=0))
 	else:
 		reprsn_text.append(np.array(reprsn))
+	entity = entity.replace('<http://rdf.freebase.com/ns/','')[:-1]
 	entity_.append(entity)
 reprsn_text = np.array(reprsn_text)
 np.save('../data/fb15k-literal/entity2stringliteral.npy', np.array(entity_))
 np.save('../data/fb15k-literal/entity_string_literal_reprsn.npy', np.array(reprsn_text))	
 
-with open('../data/fb15k-literal/filtered-string-literal-fb15k.txt') as f:
+with open('../data/fb15k-literal/filtered-string-literal-fb15k.txt','w') as f:
 	for triple in filtered_triples:
 		f.write(triple[0] + '\t' + triple[1] + '\t' + triple[2] + '\n')		
 

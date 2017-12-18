@@ -46,13 +46,6 @@ n_r = len(idx2relation)
 X_train = np.load('data/fb15k-literal/bin/train.npy')
 X_val = np.load('data/fb15k-literal/bin/val.npy')
 
-# Load Literals
-train_literal_s = load_npz('data/fb15k-literal/bin/train_literal_s.npz').todense().astype(np.float32)
-train_literal_o = load_npz('data/fb15k-literal/bin/train_literal_o.npz').todense().astype(np.float32)
-val_literal_s = load_npz('data/fb15k-literal/bin/val_literal_s.npz').todense().astype(np.float32)
-val_literal_o = load_npz('data/fb15k-literal/bin/val_literal_o.npz').todense().astype(np.float32)
-
-n_l = train_literal_s.shape[1]
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
