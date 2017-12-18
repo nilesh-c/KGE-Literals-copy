@@ -205,7 +205,7 @@ for epoch in range(n_epoch):
             hits1, hits2 = hits
 
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f} time per batch: {:.2f}s'
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f}; time per batch: {:.2f}s'
                   .format(it, loss_total.data[0], mr, mrr, hits1, hits2, end-start))
 
             model.train()
