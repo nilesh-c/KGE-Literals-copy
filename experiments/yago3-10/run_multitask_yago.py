@@ -134,8 +134,9 @@ if args.test:
     model.eval()
 
     hits_ks = [1, 3, 10]
-    # Use all entities for testing, without sampling
-    mr, mrr, hits = eval_embeddings(model, X_test, n_ent, hits_ks, n_sample=None)
+
+    # Use entire test set
+    mr, mrr, hits = eval_embeddings_vertical(model, X_test, n_ent, hits_ks, n_sample=None)
 
     hits1, hits3, hits10 = hits
 
@@ -228,7 +229,9 @@ for epoch in range(n_epoch):
             model.eval()
 
             hits_ks = [1, 3, 10]
-            mr, mrr, hits = eval_embeddings(model, X_val, n_ent, hits_ks, n_sample=500)
+
+            # Only use 100 samples of X_val
+            mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_ent, hits_ks, n_sample=100)
 
             hits1, hits3, hits10 = hits
 

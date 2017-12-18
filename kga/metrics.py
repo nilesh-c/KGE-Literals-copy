@@ -167,6 +167,45 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     return mr, mrr, hitsk
 
 
+def eval_embeddings_vertical(model, X_test, n_e, k, n_sample=100):
+    M = X_test.shape[0]
+
+    if n_sample is not None:
+        sample_idxs = np.random.randint(M, size=n_sample)
+        X_test_samples = X_test[sample_idxs, :]
+    else:
+        X_test_samples = X_test.copy()
+
+    ranks_h = np.zeros(X_test_samples.shape[0])
+    ranks_t = np.zeros(X_test_samples.shape[0])
+
+    for i, x in enumerate(X_test_samples):
+        h, t = x[0], x[2]
+
+        x = x.reshape(1, -1)
+        y_h, y_t = model.predict_all(x)
+
+        y_h = y_h.data.numpy()
+        y_t = y_t.data.numpy()
+
+        ranks_h[i] = st.rankdata(y_h)[h]
+        ranks_t[i] = st.rankdata(y_t)[t]
+
+    # Mean rank
+    mr = (np.mean(ranks_h) + np.mean(ranks_t)) / 2
+
+    # Mean reciprocal rank
+    mrr = (np.mean(1/ranks_h) + np.mean(1/ranks_t)) / 2
+
+    # Hits@k
+    if isinstance(k, list):
+        hitsk = [(np.mean(ranks_h <= r) + np.mean(ranks_t <= r)) / 2 for r in k]
+    else:
+        hitsk = (np.mean(ranks_h <= k) + np.mean(ranks_t <= k)) / 2
+
+    return mr, mrr, hitsk
+
+
 def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit_img=None, X_lit_txt=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model by ranking

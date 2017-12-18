@@ -329,3 +329,39 @@ class MTKGNN_YAGO(Model):
             return y_er.view(-1, 1), y_lit_s.view(-1, 1), y_lit_o.view(-1, 1)
         else:
             return y_er.view(-1, 1)
+
+    def predict_all(self, X):
+        """
+        Let X be a triple (s, p, o), i.e. tensor of 1x3, return two lists:
+            - list of (s, p, all_others)
+            - list of (all_others, p, o)
+        """
+        # Decompose X into head, relationship, tail
+        s, p, o = X[:, 0], X[:, 1], X[:, 2]
+
+        if self.gpu:
+            s = Variable(torch.from_numpy(s).cuda())
+            p = Variable(torch.from_numpy(p).cuda())
+            o = Variable(torch.from_numpy(o).cuda())
+        else:
+            s = Variable(torch.from_numpy(s))
+            p = Variable(torch.from_numpy(p))
+            o = Variable(torch.from_numpy(o))
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_ent(s)
+        e_r = self.emb_rel(p)
+        e_o = self.emb_ent(o)
+
+        # Predict o
+        e_s_rep = e_s.repeat(self.n_ent, 1)  # n_ent x k
+        e_r_rep = e_r.repeat(self.n_ent, 1)  # n_ent x k
+        phi_o = torch.cat([e_s_rep, e_r_rep, self.emb_ent.weight], 1)  # n_ent x 3k
+        y_o = self.ermlp(phi_o).view(-1)
+
+        # Predict s
+        e_o_rep = e_o.repeat(self.n_ent, 1)
+        phi_s = torch.cat([self.emb_ent.weight, e_r_rep, e_o_rep], 1)  # n_ent x 3k
+        y_s = self.ermlp(phi_s).view(-1)
+
+        return y_s.cpu(), y_o.cpu()
