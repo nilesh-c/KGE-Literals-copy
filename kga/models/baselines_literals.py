@@ -19,7 +19,7 @@ class MTKGNN_MovieLens(Model):
     Tay, Yi, et al. "Multi-task Neural Network for Non-discrete Attribute Prediction in Knowledge Graphs." CIKM 2017.
     """
 
-    def __init__(self, n_usr, n_mov, n_rat, n_lit_usr, n_lit_mov, k, h_dim, p, lam, gpu=False):
+    def __init__(self, n_usr, n_mov, n_rat, n_lit_usr, n_lit_mov, k, h_dim, lam, gpu=False):
         """
         MT-KGNN: Multi-Task Knowledge Graph Neural Network
         --------------------------------------------------
@@ -47,9 +47,6 @@ class MTKGNN_MovieLens(Model):
             h_dim: int
                 Size of hidden layer.
 
-            p: float
-                Dropout rate.
-
             lam: float
                 Prior strength of the embeddings. Used to constaint the
                 embedding norms inside a (euclidean) unit ball. The prior is
@@ -68,7 +65,6 @@ class MTKGNN_MovieLens(Model):
         self.n_lit_mov = n_lit_mov
         self.k = k
         self.h_dim = h_dim
-        self.p = p
         self.lam = lam
 
         # Embeddings for E, R
