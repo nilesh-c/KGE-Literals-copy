@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models import *
+from kga.models.literals import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
@@ -11,29 +11,71 @@ from time import time
 from sklearn.utils import shuffle as skshuffle
 import pdb
 from scipy.sparse import load_npz
+import argparse
 
-C = 5 #negative samples
-n_epoch = 20
-average_loss = False
-lr = 0.01
-lr_decay_every = 20
-weight_decay = 1e-4
-embeddings_lambda = 0
-normalize_embed = False
-print_every = 10
-checkpoint_dir = 'models/'
-resume = False
-use_gpu = True
-randseed = 9999
-mb_size = 100
-embedding_size = 50
+parser = argparse.ArgumentParser(
+    description='Train RESCAL for numeric and text literal-dataset'
+)
+
+parser.add_argument('--k', type=int, default=50, metavar='',
+                    help='embedding dim (default: 50)')
+parser.add_argument('--mbsize', type=int, default=100, metavar='',
+                    help='size of minibatch (default: 100)')
+parser.add_argument('--negative_samples', type=int, default=10, metavar='',
+                    help='number of negative samples per positive sample  (default: 10)')
+parser.add_argument('--nepoch', type=int, default=5, metavar='',
+                    help='number of training epoch (default: 5)')
+parser.add_argument('--average_loss', default=False, action='store_true',
+                    help='whether to average or sum the loss over minibatch')
+parser.add_argument('--lr', type=float, default=0.01, metavar='',
+                    help='learning rate (default: 0.01)')
+parser.add_argument('--lr_decay_every', type=int, default=20, metavar='',
+                    help='decaying learning rate every n epoch (default: 20)')
+parser.add_argument('--weight_decay', type=float, default=1e-4, metavar='',
+                    help='L2 weight decay (default: 1e-4)')
+parser.add_argument('--embeddings_lambda', type=float, default=0, metavar='',
+                    help='prior strength for embeddings. Constraints embeddings norms to at most one  (default: 0)')
+parser.add_argument('--normalize_embed', default=False, type=bool, metavar='',
+                    help='whether to normalize embeddings to unit euclidean ball (default: False)')
+parser.add_argument('--log_interval', type=int, default=9999, metavar='',
+                    help='interval between training status logs (default: 9999)')
+parser.add_argument('--checkpoint_dir', default='models/', metavar='',
+                    help='directory to save model checkpoint, saved every epoch (default: models/)')
+parser.add_argument('--resume', default=False, type=bool, metavar='',
+                    help='resume the training from latest checkpoint (default: False')
+parser.add_argument('--use_gpu', default=False, action='store_true',
+                    help='whether to run in the GPU')
+parser.add_argument('--randseed', default=9999, type=int, metavar='',
+                    help='resume the training from latest checkpoint (default: False')
+parser.add_argument('--loss_type', default='rankloss', type=str, metavar='', 
+                    help='loss function of Model, two options: rankloss and logloss')
+args = parser.parse_args()
+
+embedding_size = args.k
+mbsize = args.mbsize
+
+C = args.negative_samples #negative samples
+n_epoch = args.nepoch
+average_loss = args.average_loss
+lr = args.lr
+lr_decay_every = args.lr_decay_every
+weight_decay = args.weight_decay
+embeddings_lambda = args.embeddings_lambda
+normalize_embed = args.normalize_embed
+print_every = args.log_interval
+checkpoint_dir = args.checkpoint_dir
+resume = args.resume
+use_gpu = args.use_gpu
+randseed = args.randseed
+
 loss_type = 'rankloss'
 # Set random seed
-np.random.seed(randseed)
-torch.manual_seed(randseed)
+np.random.seed(args.randseed)
+torch.manual_seed(args.randseed)
 
 if use_gpu:
-    torch.cuda.manual_seed(randseed)
+    torch.cuda.manual_seed(args.randseed)
+
 
 
 # Load dictionary lookups
@@ -53,28 +95,46 @@ val_literal_s = load_npz('data/fb15k-literal/bin/val_literal_s.npz').todense().a
 val_literal_o = load_npz('data/fb15k-literal/bin/val_literal_o.npz').todense().astype(np.float32)
 
 # Load Text Literals
-stringliteral_id = np.load('../data/fb15k-literal/entity2stringliteral.npy')
-stringliteral_reprsn = np.load('../data/fb15k-literal/entity_string_literal_reprsn.npy').astype('float32')
+stringliteral_id = np.load('data/fb15k-literal/entity2stringliteral.npy')
+stringliteral_reprsn = np.load('data/fb15k-literal/entity_string_literal_reprsn.npy').astype('float32')
 
 # Split Text literals
 train_string_s = []
 train_string_o = []
 for triple in X_train:
-    train_string_s.append(stringliteral_reprsn[np.where(idx2entity[triple[0]]==stringliteral_id)[0],:])
-    train_string_o.append(stringliteral_reprsn[np.where(idx2entity[triple[2]]==stringliteral_id)[0],:])
+    idx_s = np.where(idx2entity[triple[0]]==stringliteral_id)[0]
+    idx_o = np.where(idx2entity[triple[2]]==stringliteral_id)[0]
 
-train_string_s = np.array(train_string_s).astype('float32')
-train_string_o = np.array(train_string_o).astype('float32')
+    if idx_s:
+        train_string_s.append(stringliteral_reprsn[idx_s[0]])
+    else:
+        train_string_s.append(np.zeros(384))
+    if idx_o:
+        train_string_o.append(stringliteral_reprsn[idx_o[0]])
+    else:
+        train_string_o.append(np.zeros(384))
 
+
+train_string_s = np.array(train_string_s)
+train_string_o = np.array(train_string_o)
 val_string_s = []
 val_string_o = []
 for triple in X_val:
-    val_string_s.append(stringliteral_reprsn[np.where(idx2entity[triple[0]]==stringliteral_id)[0],:])
-    val_string_o.append(stringliteral_reprsn[np.where(idx2entity[triple[2]]==stringliteral_id)[0],:])
+    idx_s = np.where(idx2entity[triple[0]]==stringliteral_id)[0]
+    idx_o = np.where(idx2entity[triple[2]]==stringliteral_id)[0]
+    if idx_s:
+        val_string_s.append(stringliteral_reprsn[idx_s[0]])
+    else:
+        val_string_s.append(np.zeros(384))
+    if idx_o:    
+        val_string_o.append(stringliteral_reprsn[idx_o[0]])
+    else:
+        val_string_o.append(np.zeros(384))
 
-val_string_s = np.array(val_string_s).astype('float32')
-val_string_o = np.array(val_string_o).astype('float32')
+val_string_s = np.array(val_string_s)
+val_string_o = np.array(val_string_o)
 
+pdb.set_trace()
 n_l = train_literal_s.shape[1]
 n_text = train_string_s.shape[1]
 M_train = X_train.shape[0]

@@ -9,7 +9,7 @@ import kga.util as util
 from kga.util import inherit_docstrings
 
 from kga.models.base import Model
-
+import pdb
 
 @inherit_docstrings
 class ERLMLP_MovieLens(Model):
@@ -203,10 +203,7 @@ class RESCAL_literal(Model):
         self.n_r = n_r
         self.k = k
         self.lam = lam
-        if n_l != None:
-            self.reprs_subject = nn.Linear(n_l, self.k)
-            self.reprs_object = nn.Linear(n_l, self.k)
-
+        self.n_l = n_l
         if n_text != None:
             self.reprs_text_subject = nn.Linear(n_text, self.k)
             self.reprs_text_object = nn.Linear(n_text, self.k)
@@ -219,7 +216,7 @@ class RESCAL_literal(Model):
         self.initialize_embeddings()
 
         self.mlp = nn.Sequential(
-            nn.Linear(2*k, k),
+            nn.Linear(self.n_l + k, k),
             nn.ReLU()
         )
         # Copy all params to GPU if specified
@@ -254,18 +251,16 @@ class RESCAL_literal(Model):
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
         if s_lit != None and o_lit != None:
-            s_rep = self.reprs_subject(s_lit)
-            o_rep = self.reprs_object(o_lit)
-            e1_rep = torch.cat([e_hs, s_rep], 1)  # M x 2k
-            e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k            
+            e1_rep = torch.cat([e_hs, s_lit], 1)  # M x (k + n_l)
+            e2_rep = torch.cat([e_ts, o_lit], 1)  # M x (k + n_l)            
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
         
         elif text_s != None and text_o != None:    
             text_s_rep = self.reprs_subject(text_s)
             text_o_rep = self.reprs_object(text_o)
-            e1_rep = torch.cat([e_hs, s_rep, text_s_rep], 1)  # M x 3k
-            e2_rep = torch.cat([e_ts, o_rep, text_o_rep], 1)  # M x 3k
+            e1_rep = torch.cat([e_hs, s_lit, text_s_rep], 1)  # M x 3k
+            e2_rep = torch.cat([e_ts, o_lit, text_o_rep], 1)  # M x 3k
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
         else:
