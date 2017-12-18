@@ -1,7 +1,7 @@
 import sys
 sys.path.append('.')
 
-from kga.models.literals import *
+from kga.models.baselines_literals import *
 from kga.metrics import *
 from kga.util import *
 import numpy as np
@@ -48,10 +48,10 @@ parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
-parser.add_argument('--use_user_lit', default=False, type=bool, metavar='',
-                    help='whether to use users literals (default: False)')
-parser.add_argument('--use_movie_lit', default=False, type=bool, metavar='',
-                    help='whether to use movies literals (default: False)')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Activate test mode: gather results on test set only with trained model.')
+parser.add_argument('--test_model', default='mtkgnn', metavar='',
+                    help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
 
 args = parser.parse_args()
 
@@ -74,6 +74,7 @@ n_rel = len(idx2rel)
 # Load dataset
 X_train = np.load('data/yago3-10-literal/bin/train.npy').astype(int)
 X_val = np.load('data/yago3-10-literal/bin/val.npy').astype(int)
+X_test = np.load('data/yago3-10-literal/bin/test.npy').astype(int)
 
 # Load literals
 X_lit = np.load('data/yago3-10-literal/bin/numerical_literals.npy').astype(np.float32)
@@ -121,6 +122,36 @@ if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
 
+"""
+Test mode: Evaluate trained model on test set
+=============================================
+"""
+if args.test:
+    model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
+    state = torch.load(model_name, map_location=lambda storage, loc: storage)
+    model.load_state_dict(state)
+
+    model.eval()
+
+    hits_ks = [1, 3, 10]
+
+    # Use entire test set
+    mr, mrr, hits = eval_embeddings_vertical(model, X_test, n_ent, hits_ks, n_sample=None)
+
+    hits1, hits3, hits10 = hits
+
+    # For TransE, show loss, mrr & hits@10
+    print('val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}'
+          .format(mr, mrr, hits1, hits3, hits10))
+
+    # Quit immediately
+    exit(0)
+
+
+"""
+Train mode: Train model from scratch
+====================================
+"""
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
@@ -158,8 +189,15 @@ for epoch in range(n_epoch):
         y_true_lit_s = X_lit[X_train_mb[:, 0], s_attr]
         y_true_lit_o = X_lit[X_train_mb[:, 2], o_attr]
 
-        y_true_lit_s = Variable(torch.from_numpy(y_true_lit_s))
-        y_true_lit_o = Variable(torch.from_numpy(y_true_lit_o))
+        if args.use_gpu:
+            y_true_lit_s = torch.from_numpy(y_true_lit_s).cuda()
+            y_true_lit_o = torch.from_numpy(y_true_lit_o).cuda()
+        else:
+            y_true_lit_s = torch.from_numpy(y_true_lit_s)
+            y_true_lit_o = torch.from_numpy(y_true_lit_o)
+
+        y_true_lit_s = Variable(y_true_lit_s)
+        y_true_lit_o = Variable(y_true_lit_o)
 
         # Training step
         y_er, y_lit_s, y_lit_o = model.forward(X_train_mb, s_attr, o_attr)
@@ -170,16 +208,14 @@ for epoch in range(n_epoch):
             y_er_pos, y_er_neg, margin=1, C=C, average=args.average_loss
         )
 
-        loss_er.backward()
-        solver.step()
-        solver.zero_grad()
-
         # Attribute nets update
         loss_lit_s = F.mse_loss(y_lit_s, y_true_lit_s)
         loss_lit_o = F.mse_loss(y_lit_o, y_true_lit_o)
         loss_lit = loss_lit_s + loss_lit_o
 
-        loss_lit.backward()
+        loss_total = loss_er + loss_lit
+
+        loss_total.backward()
         solver.step()
         solver.zero_grad()
 
@@ -190,12 +226,20 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            loss_total = loss_er + loss_lit
-            mr, mrr, hits10 = eval_embeddings(model, X_val, n_ent, 10, 100)
+            model.eval()
+
+            hits_ks = [1, 3, 10]
+
+            # Only use 100 samples of X_val
+            mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_ent, hits_ks, n_sample=100)
+
+            hits1, hits3, hits10 = hits
 
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss_total.data[0], mr, mrr, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss_total.data[0], mr, mrr, hits1, hits3, hits10, end-start))
+
+            model.train()
 
         it += 1
 

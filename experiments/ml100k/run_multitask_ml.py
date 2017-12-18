@@ -48,10 +48,10 @@ parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
-parser.add_argument('--use_user_lit', default=False, type=bool, metavar='',
-                    help='whether to use users literals (default: False)')
-parser.add_argument('--use_movie_lit', default=False, type=bool, metavar='',
-                    help='whether to use movies literals (default: False)')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Activate test mode: gather results on test set only with trained model.')
+parser.add_argument('--test_model', default='mtkgnn', metavar='',
+                    help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
 
 args = parser.parse_args()
 
@@ -76,6 +76,7 @@ n_mov = len(idx2movie)
 # Load dataset
 X_train = np.load('data/ml-100k/bin/rating_train.npy')
 X_val = np.load('data/ml-100k/bin/rating_val.npy')
+X_test = np.load('data/ml-100k/bin/rating_test.npy')
 
 # Load literals
 X_lit_usr = np.load('data/ml-100k/bin/user_literals.npy').astype(np.float32)
@@ -121,12 +122,40 @@ n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
 checkpoint_dir = '{}/ml-100k'.format(args.checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/distmult_rank.bin'.format(checkpoint_dir)
+checkpoint_path = '{}/mtkgnn.bin'.format(checkpoint_dir)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
 
+"""
+Test mode: Evaluate trained model on test set
+=============================================
+"""
+if args.test:
+    model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
+    state = torch.load(model_name, map_location=lambda storage, loc: storage)
+    model.load_state_dict(state)
+
+    model.eval()
+
+    hits_ks = [1, 2]
+    mr, mrr, hits = eval_embeddings_rel(model, X_test, n_rat, hits_ks)
+
+    hits1, hits2 = hits
+
+    # For TransE, show loss, mrr & hits@10
+    print('val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f}'
+          .format(mr, mrr, hits1, hits2))
+
+    # Quit immediately
+    exit(0)
+
+
+"""
+Train mode: Train model from scratch
+====================================
+"""
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
@@ -164,8 +193,15 @@ for epoch in range(n_epoch):
         y_true_lit_usr = X_lit_usr[X_train_mb[:, 0], usr_attr]
         y_true_lit_mov = X_lit_mov[X_train_mb[:, 2], mov_attr]
 
-        y_true_lit_usr = Variable(torch.from_numpy(y_true_lit_usr))
-        y_true_lit_mov = Variable(torch.from_numpy(y_true_lit_mov))
+        if args.use_gpu:
+            y_true_lit_usr = torch.from_numpy(y_true_lit_usr).cuda()
+            y_true_lit_mov = torch.from_numpy(y_true_lit_mov).cuda()
+        else:
+            y_true_lit_usr = torch.from_numpy(y_true_lit_usr)
+            y_true_lit_mov = torch.from_numpy(y_true_lit_mov)
+
+        y_true_lit_usr = Variable(y_true_lit_usr)
+        y_true_lit_mov = Variable(y_true_lit_mov)
 
         # Training step
         y_er, y_lit_usr, y_lit_mov = model.forward(X_train_mb, usr_attr, mov_attr)
@@ -176,16 +212,14 @@ for epoch in range(n_epoch):
             y_er_pos, y_er_neg, margin=1, C=C, average=args.average_loss
         )
 
-        loss_er.backward()
-        solver.step()
-        solver.zero_grad()
-
         # Attribute nets update
         loss_lit_usr = F.mse_loss(y_lit_usr, y_true_lit_usr)
         loss_lit_mov = F.mse_loss(y_lit_mov, y_true_lit_mov)
         loss_lit = loss_lit_usr + loss_lit_mov
 
-        loss_lit.backward()
+        loss_total = loss_er + loss_lit
+
+        loss_total.backward()
         solver.step()
         solver.zero_grad()
 
@@ -196,12 +230,18 @@ for epoch in range(n_epoch):
 
         # Training logs
         if it % print_every == 0:
-            loss_total = loss_er + loss_lit
-            mr, mrr, hits10 = eval_embeddings_rel(model, X_val, n_rat, 1)
+            model.eval()
+
+            hits_ks = [1, 2]
+            mr, mrr, hits = eval_embeddings_rel(model, X_val, n_rat, hits_ks)
+
+            hits1, hits2 = hits
 
             # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; time per batch: {:.2f}s'
-                  .format(it, loss_total.data[0], mr, mrr, hits10, end-start))
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss_total.data[0], mr, mrr, hits1, hits2, end-start))
+
+            model.train()
 
         it += 1
 
