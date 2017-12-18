@@ -48,6 +48,10 @@ parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Activate test mode: gather results on test set only with trained model.')
+parser.add_argument('--test_model', default='mtkgnn', metavar='',
+                    help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
 
 args = parser.parse_args()
 
@@ -72,6 +76,7 @@ n_mov = len(idx2movie)
 # Load dataset
 X_train = np.load('data/ml-100k/bin/rating_train.npy')
 X_val = np.load('data/ml-100k/bin/rating_val.npy')
+X_test = np.load('data/ml-100k/bin/rating_test.npy')
 
 # Load literals
 X_lit_usr = np.load('data/ml-100k/bin/user_literals.npy').astype(np.float32)
@@ -117,12 +122,40 @@ n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
 checkpoint_dir = '{}/ml-100k'.format(args.checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/distmult_rank.bin'.format(checkpoint_dir)
+checkpoint_path = '{}/mtkgnn.bin'.format(checkpoint_dir)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
 
+"""
+Test mode: Evaluate trained model on test set
+=============================================
+"""
+if args.test:
+    model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
+    state = torch.load(model_name, map_location=lambda storage, loc: storage)
+    model.load_state_dict(state)
+
+    model.eval()
+
+    hits_ks = [1, 2]
+    mr, mrr, hits = eval_embeddings_rel(model, X_test, n_rat, hits_ks)
+
+    hits1, hits2 = hits
+
+    # For TransE, show loss, mrr & hits@10
+    print('val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f}'
+          .format(mr, mrr, hits1, hits2))
+
+    # Quit immediately
+    exit(0)
+
+
+"""
+Train mode: Train model from scratch
+====================================
+"""
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))

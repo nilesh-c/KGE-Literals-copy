@@ -48,6 +48,10 @@ parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Activate test mode: gather results on test set only with trained model.')
+parser.add_argument('--test_model', default='mtkgnn', metavar='',
+                    help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
 
 args = parser.parse_args()
 
@@ -70,6 +74,7 @@ n_rel = len(idx2rel)
 # Load dataset
 X_train = np.load('data/yago3-10-literal/bin/train.npy').astype(int)
 X_val = np.load('data/yago3-10-literal/bin/val.npy').astype(int)
+X_test = np.load('data/yago3-10-literal/bin/test.npy').astype(int)
 
 # Load literals
 X_lit = np.load('data/yago3-10-literal/bin/numerical_literals.npy').astype(np.float32)
@@ -117,6 +122,35 @@ if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
 
+"""
+Test mode: Evaluate trained model on test set
+=============================================
+"""
+if args.test:
+    model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
+    state = torch.load(model_name, map_location=lambda storage, loc: storage)
+    model.load_state_dict(state)
+
+    model.eval()
+
+    hits_ks = [1, 3, 10]
+    # Use all entities for testing, without sampling
+    mr, mrr, hits = eval_embeddings(model, X_test, n_ent, hits_ks, n_sample=None)
+
+    hits1, hits3, hits10 = hits
+
+    # For TransE, show loss, mrr & hits@10
+    print('val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}'
+          .format(mr, mrr, hits1, hits3, hits10))
+
+    # Quit immediately
+    exit(0)
+
+
+"""
+Train mode: Train model from scratch
+====================================
+"""
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
