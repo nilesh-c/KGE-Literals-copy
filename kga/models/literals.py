@@ -237,7 +237,7 @@ class RESCAL_literal(Model):
             if s_lit != None and o_lit != None:
                 s_lit = Variable(torch.from_numpy(s_lit).cuda())
                 o_lit = Variable(torch.from_numpy(o_lit).cuda())
-            if text_s != None and text_o != None:    
+            if text_s != None and text_o != None:
                 text_s = Variable(torch.from_numpy(text_s).cuda())
                 text_o = Variable(torch.from_numpy(text_o).cuda())
         else:
@@ -247,7 +247,7 @@ class RESCAL_literal(Model):
             if s_lit != None and o_lit != None:
                 s_lit = Variable(torch.from_numpy(s_lit))
                 o_lit = Variable(torch.from_numpy(o_lit))
-            if text_s != None and text_o != None:    
+            if text_s != None and text_o != None:
                 text_s = Variable(torch.from_numpy(text_s))
                 text_o = Variable(torch.from_numpy(text_o))
         # Project to embedding, each is M x k
@@ -257,11 +257,11 @@ class RESCAL_literal(Model):
             s_rep = self.reprs_subject(s_lit)
             o_rep = self.reprs_object(o_lit)
             e1_rep = torch.cat([e_hs, s_rep], 1)  # M x 2k
-            e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k            
+            e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
-        
-        elif text_s != None and text_o != None:    
+
+        elif text_s != None and text_o != None:
             text_s_rep = self.reprs_subject(text_s)
             text_o_rep = self.reprs_object(text_o)
             e1_rep = torch.cat([e_hs, s_rep, text_s_rep], 1)  # M x 3k
@@ -307,6 +307,7 @@ class RESCAL_literal(Model):
             return y_pred.cpu().data.numpy()
         else:
             return y_pred.data.numpy()
+
 
 @inherit_docstrings
 class DistMult_literal(Model):
@@ -431,7 +432,8 @@ class DistMult_literal(Model):
             return y_pred.cpu().data.numpy()
         else:
             return y_pred.data.numpy()
-            
+
+
 @inherit_docstrings
 class DistMultDecoupled(Model):
     """

@@ -168,5 +168,3 @@ class MTKGNN_YAGO(Model):
             return y_er.view(-1, 1), y_lit_s.view(-1, 1), y_lit_o.view(-1, 1)
         else:
             return y_er.view(-1, 1)
-
-
