@@ -364,4 +364,4 @@ class MTKGNN_YAGO(Model):
         phi_s = torch.cat([self.emb_ent.weight, e_r_rep, e_o_rep], 1)  # n_ent x 3k
         y_s = self.ermlp(phi_s).view(-1)
 
-        return y_s.cpu(), y_o.cpu()
+        return y_s, y_o
