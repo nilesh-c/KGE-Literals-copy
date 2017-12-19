@@ -52,7 +52,7 @@ parser.add_argument('--loss_type', default='rankloss', type=str, metavar='',
 args = parser.parse_args()
 
 embedding_size = args.k
-mbsize = args.mbsize
+mb_size = args.mbsize
 
 C = args.negative_samples #negative samples
 n_epoch = args.nepoch
@@ -134,7 +134,6 @@ for triple in X_val:
 val_string_s = np.array(val_string_s)
 val_string_o = np.array(val_string_o)
 
-pdb.set_trace()
 n_l = train_literal_s.shape[1]
 n_text = train_string_s.shape[1]
 M_train = X_train.shape[0]
@@ -152,6 +151,7 @@ checkpoint_path = '{}/rescal_rank.bin'.format(checkpoint_dir)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
+
 
 
 # Begin training
@@ -231,7 +231,7 @@ for epoch in range(n_epoch):
             else:
                 n_sample = 100
                 k = 10
-                mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o, val_string_s, val_string_o)
+                mr, mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o, val_string_s, val_string_o)
             # For TransE, show loss, mrr & hits@10
             print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
                   .format(it, loss.data[0], mrr, hits10, end-start))

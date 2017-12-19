@@ -42,7 +42,7 @@ def auc(y_pred, y_true):
     return roc_auc_score(y_true, y_pred)
 
 
-def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_lit_o_ori=None, X_lit_img=None, X_lit_txt=None):
+def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_lit_o_ori=None, X_txt_s=None, X_txt_o=None, X_lit_img=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model.
     The procedure follows Bordes, et. al., 2011.
@@ -91,9 +91,12 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     # Gather scores for correct entities
     if X_lit_s_ori is None and X_lit_o_ori is None:
         y = model.predict(X_test).ravel()
-    elif X_lit_img is None and X_lit_txt is None:
+    elif X_lit_img is None and X_txt_s is None and X_txt_o is None:
         y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori)
         y = y.ravel()
+    elif X_lit_img is None:
+        y = model.predict(X_test, X_lit_s_ori, X_lit_o_ori, X_txt_s, X_txt_o)
+        y = y.ravel()        
     else:
         X_lit_s_ori = X_lit[X_test[:, 0]]
         X_lit_o_ori = X_lit[X_test[:, 2]]
@@ -126,11 +129,20 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
         if X_lit_s_ori is None and X_lit_o_ori is None:
             y_h = model.predict(X_corr_h).ravel()
             y_t = model.predict(X_corr_t).ravel()
-        elif X_lit_img is None and X_lit_txt is None:
+        elif X_lit_img is None and X_txt_s is None and X_txt_o is None:
             X_lit_s = X_lit_s_ori[X_corr_h[:, 0]]
             X_lit_o = X_lit_o_ori[X_corr_t[:, 2]]
             y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori).ravel()
             y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o).ravel()
+        elif X_lit_img is None:
+            X_lit_s = X_lit_s_ori[X_corr_h[:, 0]]
+            X_lit_o = X_lit_o_ori[X_corr_t[:, 2]]
+            X_lit_s_txt = X_txt_s[X_corr_h[:, 0]]
+            X_lit_o_txt = X_txt_o[X_corr_t[:, 2]]
+
+            y_h = model.predict(X_corr_h, X_lit_s, X_lit_o_ori, X_lit_s_txt, X_txt_o).ravel()
+            y_t = model.predict(X_corr_t, X_lit_s_ori, X_lit_o, X_txt_s, X_lit_o_txt).ravel()            
+             
         else:
             X_lit_s = X_lit[X_corr_h[:, 0]]
             X_lit_o = X_lit[X_corr_t[:, 2]]
@@ -167,7 +179,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     return mr, mrr, hitsk
 
 
-def eval_embeddings_vertical(model, X_test, n_e, k, n_sample=100):
+def eval_embeddings_vertical(model, X_test, n_e, k, n_sample=100, X_lit_s_ori=None, X_lit_o_ori=None, X_lit_img=None, X_lit_txt=None):
     M = X_test.shape[0]
 
     if n_sample is not None:

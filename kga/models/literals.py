@@ -210,9 +210,10 @@ class RESCAL_literal(Model):
         self.k = k
         self.lam = lam
         self.n_l = n_l
-        if n_text != None:
-            self.reprs_text_subject = nn.Linear(n_text, self.k)
-            self.reprs_text_object = nn.Linear(n_text, self.k)
+        self.n_text = n_text
+        if self.n_text != None:
+            self.reprs_text_subject = nn.Linear(self.n_text, self.k)
+            self.reprs_text_object = nn.Linear(self.n_text, self.k)
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
@@ -237,32 +238,32 @@ class RESCAL_literal(Model):
             hs = Variable(torch.from_numpy(hs).cuda())
             ls = Variable(torch.from_numpy(ls).cuda())
             ts = Variable(torch.from_numpy(ts).cuda())
-            if s_lit != None and o_lit != None:
+            if self.n_l != None:
                 s_lit = Variable(torch.from_numpy(s_lit).cuda())
                 o_lit = Variable(torch.from_numpy(o_lit).cuda())
-            if text_s != None and text_o != None:
+            if self.n_text != None:
                 text_s = Variable(torch.from_numpy(text_s).cuda())
                 text_o = Variable(torch.from_numpy(text_o).cuda())
         else:
             hs = Variable(torch.from_numpy(hs))
             ls = Variable(torch.from_numpy(ls))
             ts = Variable(torch.from_numpy(ts))
-            if s_lit != None and o_lit != None:
+            if self.n_l != None:
                 s_lit = Variable(torch.from_numpy(s_lit))
                 o_lit = Variable(torch.from_numpy(o_lit))
-            if text_s != None and text_o != None:
+            if self.n_text != None:
                 text_s = Variable(torch.from_numpy(text_s))
                 text_o = Variable(torch.from_numpy(text_o))
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        if s_lit != None and o_lit != None:
+        if self.n_l != None:
             e1_rep = torch.cat([e_hs, s_lit], 1)  # M x (k + n_l)
             e2_rep = torch.cat([e_ts, o_lit], 1)  # M x (k + n_l)            
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
 
-        elif text_s != None and text_o != None:
+        elif self.n_text != None:
             text_s_rep = self.reprs_subject(text_s)
             text_o_rep = self.reprs_object(text_o)
             e1_rep = torch.cat([e_hs, s_lit, text_s_rep], 1)  # M x 3k
