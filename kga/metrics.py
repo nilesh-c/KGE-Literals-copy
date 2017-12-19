@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 import scipy.spatial.distance
 from sklearn.metrics import roc_auc_score
 from collections import defaultdict
@@ -176,20 +177,20 @@ def eval_embeddings_vertical(model, X_test, n_e, k, n_sample=100):
     else:
         X_test_samples = X_test.copy()
 
-    ranks_h = np.zeros(X_test_samples.shape[0])
-    ranks_t = np.zeros(X_test_samples.shape[0])
+    ranks_h = np.zeros(X_test_samples.shape[0], dtype=int)
+    ranks_t = np.zeros(X_test_samples.shape[0], dtype=int)
 
     for i, x in enumerate(X_test_samples):
-        h, t = x[0], x[2]
+        h, t = int(x[0]), int(x[2])
 
         x = x.reshape(1, -1)
         y_h, y_t = model.predict_all(x)
 
-        y_h = y_h.data.numpy()
-        y_t = y_t.data.numpy()
+        _, ranking_h = torch.sort(y_h)
+        _, ranking_t = torch.sort(y_t)
 
-        ranks_h[i] = st.rankdata(y_h)[h]
-        ranks_t[i] = st.rankdata(y_t)[t]
+        ranks_h[i] = int((ranking_h == h).nonzero()) + 1
+        ranks_t[i] = int((ranking_t == t).nonzero()) + 1
 
     # Mean rank
     mr = (np.mean(ranks_h) + np.mean(ranks_t)) / 2
