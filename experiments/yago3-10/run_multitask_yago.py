@@ -71,6 +71,10 @@ idx2rel = np.load('data/yago3-10-literal/bin/idx2rel.npy')
 n_ent = len(idx2ent)
 n_rel = len(idx2rel)
 
+# Load evaluation filters
+filter_s_val = np.load('data/yago3-10-literal/bin/filter_s_val.npy')
+filter_o_val = np.load('data/yago3-10-literal/bin/filter_o_val.npy')
+
 # Load dataset
 X_train = np.load('data/yago3-10-literal/bin/train.npy').astype(int)
 X_val = np.load('data/yago3-10-literal/bin/val.npy').astype(int)
@@ -231,7 +235,10 @@ for epoch in range(n_epoch):
             hits_ks = [1, 3, 10]
 
             # Only use 100 samples of X_val
-            mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_ent, hits_ks, n_sample=100)
+            mr, mrr, hits = eval_embeddings_vertical(
+                model, X_val, n_ent, hits_ks, filter_s_val, filter_o_val,
+                n_sample=100
+            )
 
             hits1, hits3, hits10 = hits
 

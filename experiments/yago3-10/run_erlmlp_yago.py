@@ -191,7 +191,7 @@ for epoch in range(n_epoch):
             hits_ks = [1, 3, 10]
 
             mr, mrr, hits = eval_embeddings(model, X_val, n_ent, hits_ks, 1000,
-                                        X_lit, X_lit_img, X_lit_txt)
+                                            X_lit, X_lit_img, X_lit_txt)
 
             hits1, hits3, hits10 = hits
 
