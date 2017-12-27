@@ -170,7 +170,7 @@ for epoch in range(n_epoch):
             y_pos, y_neg = y[:m], y[m:]
 
             loss = model.ranking_loss(
-                y_pos, y_neg, margin=args.transe_gamma, C=C, average=False
+                y_pos, y_neg, margin=args.transe_gamma, C=C, average=args.average_loss
             )
         elif args.loss == 'logloss':
             loss = model.log_loss(y, y_true_mb, average=args.average_loss)
@@ -210,11 +210,20 @@ for epoch in range(n_epoch):
                 print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
                       .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss.data[0], end-start))
             else:
-                mr, mrr, hits10 = eval_embeddings(model, X_val_pos, n_e, k=10, n_sample=100)
+                model.eval()
+
+                hits_ks = [1, 3, 10]
+
+                # Only use 100 samples of X_val
+                mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=100)
+
+                hits1, hits3, hits10 = hits
 
                 # For TransE, show loss, mrr & hits@10
-                print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], mr, mrr, hits10, end-start))
+                print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                      .format(it, loss.data[0], mr, mrr, hits1, hits3, hits10, end-start))
+
+                model.train()
 
         it += 1
 

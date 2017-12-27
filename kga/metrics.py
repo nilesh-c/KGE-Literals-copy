@@ -168,24 +168,38 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     return mr, mrr, hitsk
 
 
-def eval_embeddings_vertical(model, X_test, n_e, k, n_sample=100):
+def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, n_sample=100):
     M = X_test.shape[0]
 
     if n_sample is not None:
         sample_idxs = np.random.randint(M, size=n_sample)
-        X_test_samples = X_test[sample_idxs, :]
     else:
-        X_test_samples = X_test.copy()
+        sample_idxs = np.arange(M)
 
-    ranks_h = np.zeros(X_test_samples.shape[0], dtype=int)
-    ranks_t = np.zeros(X_test_samples.shape[0], dtype=int)
+    ranks_h = np.zeros(sample_idxs.shape[0], dtype=int)
+    ranks_t = np.zeros(sample_idxs.shape[0], dtype=int)
 
-    for i, x in enumerate(X_test_samples):
+    for i, idx in enumerate(sample_idxs):
+        x = X_test[idx]
         h, t = int(x[0]), int(x[2])
 
         x = x.reshape(1, -1)
         y_h, y_t = model.predict_all(x)
 
+        # Filtered setting
+        y_h, y_t = y_h.data, y_t.data
+        true_h, true_t = y_h[h], y_t[t]
+
+        if filter_h is not None:
+            y_h[filter_h[idx]] = np.inf
+
+        if filter_t is not None:
+            y_t[filter_t[idx]] = np.inf
+
+        y_h[h] = true_h
+        y_t[t] = true_t
+
+        # Do ranking
         _, ranking_h = torch.sort(y_h)
         _, ranking_t = torch.sort(y_t)
 
