@@ -127,7 +127,7 @@ class MTKGNN_MovieLens(Model):
         y_sa: score for subject literal-pred task.
         y_oa: score for object literal-pred task.
         """
-        X = Variable(torch.from_numpy(X))
+        X = Variable(torch.from_numpy(X)).long()
         X = X.cuda() if self.gpu else X
 
         # Decompose X into head, relationship, tail
@@ -276,7 +276,7 @@ class MTKGNN_YAGO(Model):
         y_sa: score for subject literal-pred task.
         y_oa: score for object literal-pred task.
         """
-        X = Variable(torch.from_numpy(X))
+        X = Variable(torch.from_numpy(X)).long()
         X = X.cuda() if self.gpu else X
 
         # Decompose X into head, relationship, tail
@@ -318,7 +318,7 @@ class MTKGNN_YAGO(Model):
             - list of (s, p, all_others)
             - list of (all_others, p, o)
         """
-        X = Variable(torch.from_numpy(X))
+        X = Variable(torch.from_numpy(X)).long()
         X = X.cuda() if self.gpu else X
 
         # Decompose X into head, relationship, tail
