@@ -426,11 +426,11 @@ class ERMLP(Model):
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
-        e_ts = self.emb_E(ts)
         e_ls = self.emb_R(ls)
+        e_ts = self.emb_E(ts)
 
         # Forward
-        phi = torch.cat([e_hs, e_ts, e_ls], 1)  # M x 3k
+        phi = torch.cat([e_hs, e_ls, e_ts], 1)  # M x 3k
         y = self.mlp(phi)
 
         return y.view(-1, 1)
