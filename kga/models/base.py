@@ -377,17 +377,11 @@ class RESCAL(Model):
             self.cuda()
 
     def forward(self, X):
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs).view(-1, self.k, 1)
@@ -454,17 +448,11 @@ class DistMult(Model):
             self.cuda()
 
     def forward(self, X):
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -550,17 +538,11 @@ class ERMLP(Model):
             self.cuda()
 
     def forward(self, X):
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -579,17 +561,11 @@ class ERMLP(Model):
             - list of (s, p, all_others)
             - list of (all_others, p, o)
         """
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, p, o = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            p = Variable(torch.from_numpy(p).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            p = Variable(torch.from_numpy(p))
-            o = Variable(torch.from_numpy(o))
 
         # Project to embedding, each is M x k
         e_s = self.emb_E(s)
@@ -684,17 +660,11 @@ class TransE(Model):
         f: float matrix of M x 1
             Contains energies of each triplets.
         """
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
 
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
@@ -791,17 +761,11 @@ class NTN(Model):
             self.cuda()
 
     def forward(self, X):
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
 
         # Project to embedding, broadcasting is a bit convoluted
         e_hs = self.emb_E(hs).view(-1, self.k, 1)

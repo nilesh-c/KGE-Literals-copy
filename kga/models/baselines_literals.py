@@ -127,25 +127,11 @@ class MTKGNN_MovieLens(Model):
         y_sa: score for subject literal-pred task.
         y_oa: score for object literal-pred task.
         """
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, p, o = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            p = Variable(torch.from_numpy(p).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-
-            if usr_attrs is not None or mov_attrs is not None:
-                usr_attrs = Variable(torch.from_numpy(usr_attrs).cuda())
-                mov_attrs = Variable(torch.from_numpy(mov_attrs).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            p = Variable(torch.from_numpy(p))
-            o = Variable(torch.from_numpy(o))
-
-            if usr_attrs is not None or mov_attrs is not None:
-                usr_attrs = Variable(torch.from_numpy(usr_attrs))
-                mov_attrs = Variable(torch.from_numpy(mov_attrs))
 
         # Project to embedding, each is M x k
         e_usr = self.emb_usr(s)
@@ -157,6 +143,11 @@ class MTKGNN_MovieLens(Model):
         y_er = self.ermlp(phi_er)
 
         if usr_attrs is not None or mov_attrs is not None:
+            usr_attrs = Variable(torch.from_numpy(usr_attrs))
+            usr_attrs = usr_attrs.cuda() if self.gpu else usr_attrs
+            mov_attrs = Variable(torch.from_numpy(mov_attrs))
+            mov_attrs = mov_attrs.cuda() if self.gpu else mov_attrs
+
             e_lit_usr = self.emb_lit_usr(usr_attrs)
             e_lit_mov = self.emb_lit_mov(mov_attrs)
             # Forward SA-MLP
@@ -285,25 +276,11 @@ class MTKGNN_YAGO(Model):
         y_sa: score for subject literal-pred task.
         y_oa: score for object literal-pred task.
         """
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, p, o = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            p = Variable(torch.from_numpy(p).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-
-            if s_attrs is not None or o_attrs is not None:
-                s_attrs = Variable(torch.from_numpy(s_attrs).cuda())
-                o_attrs = Variable(torch.from_numpy(o_attrs).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            p = Variable(torch.from_numpy(p))
-            o = Variable(torch.from_numpy(o))
-
-            if s_attrs is not None or o_attrs is not None:
-                s_attrs = Variable(torch.from_numpy(s_attrs))
-                o_attrs = Variable(torch.from_numpy(o_attrs))
 
         # Project to embedding, each is M x k
         e_s = self.emb_ent(s)
@@ -315,6 +292,11 @@ class MTKGNN_YAGO(Model):
         y_er = self.ermlp(phi_er)
 
         if s_attrs is not None or o_attrs is not None:
+            s_attrs = Variable(torch.from_numpy(s_attrs))
+            s_attrs = s_attrs.cuda() if self.gpu else s_attrs
+            o_attrs = Variable(torch.from_numpy(o_attrs))
+            o_attrs = o_attrs.cuda() if self.gpu else o_attrs
+
             e_lit_s = self.emb_lit(s_attrs)
             e_lit_o = self.emb_lit(o_attrs)
 

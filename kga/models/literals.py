@@ -116,21 +116,18 @@ class ERLMLP_MovieLens(Model):
         """
         M = X.shape[0]
 
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, r, o = X[:, 0], X[:, 1], X[:, 2]
 
         if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            r = Variable(torch.from_numpy(r).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
             X_lit_usr = Variable(torch.from_numpy(X_lit_usr).cuda())
             X_lit_mov = Variable(torch.from_numpy(X_lit_mov).cuda())
             X_lit_img = Variable(torch.from_numpy(X_lit_img).cuda())
             X_lit_txt = Variable(torch.from_numpy(X_lit_txt).cuda())
         else:
-            s = Variable(torch.from_numpy(s))
-            r = Variable(torch.from_numpy(r))
-            o = Variable(torch.from_numpy(o))
             X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
             X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
             X_lit_img = Variable(torch.from_numpy(X_lit_img))
@@ -259,7 +256,7 @@ class RESCAL_literal(Model):
         e_ts = self.emb_E(ts)
         if self.n_l != None:
             e1_rep = torch.cat([e_hs, s_lit], 1)  # M x (k + n_l)
-            e2_rep = torch.cat([e_ts, o_lit], 1)  # M x (k + n_l)            
+            e2_rep = torch.cat([e_ts, o_lit], 1)  # M x (k + n_l)
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
 
@@ -374,20 +371,19 @@ class DistMult_literal(Model):
             self.cuda()
 
     def forward(self, X, s_lit, o_lit):
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+
         if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
             s_lit = Variable(torch.from_numpy(s_lit).cuda())
             o_lit = Variable(torch.from_numpy(o_lit).cuda())
         else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
             s_lit = Variable(torch.from_numpy(s_lit))
             o_lit = Variable(torch.from_numpy(o_lit))
+
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
@@ -401,6 +397,7 @@ class DistMult_literal(Model):
         e1_rep = self.mlp(e1_rep)   # M x k
         e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k
         e2_rep = self.mlp(e2_rep)   # M x k
+
         # Forward
         f = torch.sum(e1_rep * W * e2_rep, 1)
 
@@ -494,17 +491,11 @@ class DistMultDecoupled(Model):
             self.cuda()
 
     def forward(self, X):
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, r, o = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            r = Variable(torch.from_numpy(r).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            r = Variable(torch.from_numpy(r))
-            o = Variable(torch.from_numpy(o))
 
         # Project to embedding, each is M x k
         e_s = self.emb_S(s)
