@@ -235,6 +235,26 @@ class RESCAL(Model):
 
         return out
 
+    def predict_all(self, X):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+
+        e_hs = self.emb_E(hs).view(self.k, 1)
+        e_ts = self.emb_E(ts).view(self.k, 1)
+        W = self.emb_R(ls).view(self.k, self.k)  # k x k
+
+        all_ents = self.emb_E.weight
+        all_ents_T = all_ents.transpose(1, 0)
+
+        y_o = torch.mm(torch.mm(e_hs.transpose(0, 1), W), all_ents_T).view(-1)
+        y_s = torch.mm(torch.mm(all_ents, W), e_ts).view(-1)
+
+        return y_s, y_o
+
+
 @inherit_docstrings
 class DistMult(Model):
     """
@@ -303,6 +323,26 @@ class DistMult(Model):
         f = torch.sum(e_hs * W * e_ts, 1)
 
         return f.view(-1, 1)
+
+    def predict_all(self, X):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+
+        # Project to embedding, each is M x k
+        e_hs = self.emb_E(hs)
+        e_ts = self.emb_E(ts)
+        W = self.emb_R(ls)
+
+        all_ents_T = self.emb_E.weight.transpose(1, 0)
+
+        # 1xk * (k x n_e)
+        y_o = torch.mm(e_hs * W, all_ents_T).view(-1)
+        y_s = torch.mm(W * e_ts, all_ents_T).view(-1)
+
+        return y_s, y_o
 
 
 @inherit_docstrings
