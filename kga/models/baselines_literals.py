@@ -318,17 +318,11 @@ class MTKGNN_YAGO(Model):
             - list of (s, p, all_others)
             - list of (all_others, p, o)
         """
+        X = Variable(torch.from_numpy(X))
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, p, o = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            p = Variable(torch.from_numpy(p).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            p = Variable(torch.from_numpy(p))
-            o = Variable(torch.from_numpy(o))
 
         # Project to embedding, each is M x k
         e_s = self.emb_ent(s)
