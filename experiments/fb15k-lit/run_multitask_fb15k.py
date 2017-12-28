@@ -10,10 +10,11 @@ import argparse
 import os
 from time import time
 from sklearn.utils import shuffle as skshuffle
+from scipy.sparse import load_npz
 
 
 parser = argparse.ArgumentParser(
-    description='Train MT-KGNN on YAGO'
+    description='Train MT-KGNN on FB15k'
 )
 
 parser.add_argument('--k', type=int, default=50, metavar='',
@@ -36,10 +37,6 @@ parser.add_argument('--lr_decay_every', type=int, default=20, metavar='',
                     help='decaying learning rate every n epoch (default: 20)')
 parser.add_argument('--weight_decay', type=float, default=1e-4, metavar='',
                     help='L2 weight decay (default: 1e-4)')
-parser.add_argument('--embeddings_lambda', type=float, default=0, metavar='',
-                    help='prior strength for embeddings. Constraints embeddings norms to at most one  (default: 0)')
-parser.add_argument('--normalize_embed', default=False, type=bool, metavar='',
-                    help='whether to normalize embeddings to unit euclidean ball (default: False)')
 parser.add_argument('--log_interval', type=int, default=9999, metavar='',
                     help='interval between training status logs (default: 9999)')
 parser.add_argument('--checkpoint_dir', default='models/', metavar='',
@@ -65,47 +62,46 @@ if args.use_gpu:
 
 
 # Load dictionary lookups
-idx2ent = np.load('data/yago3-10-literal/bin/idx2ent.npy')
-idx2rel = np.load('data/yago3-10-literal/bin/idx2rel.npy')
+idx2ent = np.load('data/fb15k-literal/bin/idx2ent.npy')
+idx2rel = np.load('data/fb15k-literal/bin/idx2rel.npy')
 
 n_ent = len(idx2ent)
 n_rel = len(idx2rel)
 
 # Load evaluation filters
-filter_s_val = np.load('data/yago3-10-literal/bin/filter_s_val.npy')
-filter_o_val = np.load('data/yago3-10-literal/bin/filter_o_val.npy')
+filter_s_val = np.load('data/fb15k-literal/bin/filter_s_val.npy')
+filter_o_val = np.load('data/fb15k-literal/bin/filter_o_val.npy')
 
 # Load dataset
-X_train = np.load('data/yago3-10-literal/bin/train.npy').astype(int)
-X_val = np.load('data/yago3-10-literal/bin/val.npy').astype(int)
-X_test = np.load('data/yago3-10-literal/bin/test.npy').astype(int)
+X_train = np.load('data/fb15k-literal/bin/train.npy').astype(int)
+X_val = np.load('data/fb15k-literal/bin/val.npy').astype(int)
+X_test = np.load('data/fb15k-literal/bin/test.npy').astype(int)
 
 # Load literals
-X_lit = np.load('data/yago3-10-literal/bin/numerical_literals.npy').astype(np.float32)
-
+X_lit_s_train = load_npz('data/fb15k-literal/bin/train_literal_s.npz').todense().astype(np.float32)
+X_lit_o_train = load_npz('data/fb15k-literal/bin/train_literal_o.npz').todense().astype(np.float32)
 
 # Preprocess literals
 
 
-def normalize(X, minn, maxx):
-    return (X - minn) / (maxx - minn + 1e-8)
+# def normalize(X, minn, maxx):
+#     return (X - minn) / (maxx - minn + 1e-8)
 
 
-max_lit, min_lit = np.max(X_lit, axis=0), np.min(X_lit, axis=0)
-X_lit = normalize(X_lit, max_lit, min_lit)
+# max_lit, min_lit = np.max(X_lit, axis=0), np.min(X_lit, axis=0)
+# X_lit = normalize(X_lit, max_lit, min_lit)
 
-# Preload literals for validation
-X_lit_s_val = X_lit[X_val[:, 0]]
-X_lit_o_val = X_lit[X_val[:, 2]]
+# # Preload literals for validation
+# X_lit_s_val = X_lit[X_val[:, 0]]
+# X_lit_o_val = X_lit[X_val[:, 2]]
 
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
-n_lit = X_lit.shape[1]
+n_lit = X_lit_s_train.shape[1]
 
 k = args.k
 h_dim = args.mlp_h
-lam = args.embeddings_lambda
 C = args.negative_samples
 
 # Initialize model
@@ -131,8 +127,8 @@ Test mode: Evaluate trained model on test set
 =============================================
 """
 if args.test:
-    filter_s_test = np.load('data/yago3-10-literal/bin/filter_s_test.npy')
-    filter_o_test = np.load('data/yago3-10-literal/bin/filter_o_test.npy')
+    filter_s_test = np.load('data/fb15k-literal/bin/filter_s_test.npy')
+    filter_o_test = np.load('data/fb15k-literal/bin/filter_o_test.npy')
 
     model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
     state = torch.load(model_name, map_location=lambda storage, loc: storage)
@@ -195,8 +191,8 @@ for epoch in range(n_epoch):
         o_attr = np.random.randint(n_lit, size=m_total)
 
         # Ground truth literals
-        y_true_lit_s = X_lit[X_train_mb[:, 0], s_attr]
-        y_true_lit_o = X_lit[X_train_mb[:, 2], o_attr]
+        y_true_lit_s = X_lit_s_train[X_train_mb[:, 0], s_attr]
+        y_true_lit_o = X_lit_o_train[X_train_mb[:, 2], o_attr]
 
         if args.use_gpu:
             y_true_lit_s = torch.from_numpy(y_true_lit_s).cuda()
@@ -227,9 +223,6 @@ for epoch in range(n_epoch):
         loss_total.backward()
         solver.step()
         solver.zero_grad()
-
-        if args.normalize_embed:
-            model.normalize_embeddings()
 
         end = time()
 
