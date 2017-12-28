@@ -215,7 +215,7 @@ for epoch in range(n_epoch):
                 hits_ks = [1, 3, 10]
 
                 # Only use 100 samples of X_val
-                mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=100)
+                mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=None)
 
                 hits1, hits3, hits10 = hits
 

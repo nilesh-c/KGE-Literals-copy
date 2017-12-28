@@ -131,6 +131,9 @@ Test mode: Evaluate trained model on test set
 =============================================
 """
 if args.test:
+    filter_s_test = np.load('data/yago3-10-literal/bin/filter_s_test.npy')
+    filter_o_test = np.load('data/yago3-10-literal/bin/filter_o_test.npy')
+
     model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
     state = torch.load(model_name, map_location=lambda storage, loc: storage)
     model.load_state_dict(state)
@@ -140,7 +143,9 @@ if args.test:
     hits_ks = [1, 3, 10]
 
     # Use entire test set
-    mr, mrr, hits = eval_embeddings_vertical(model, X_test, n_ent, hits_ks, n_sample=None)
+    mr, mrr, hits = eval_embeddings_vertical(
+        model, X_test, n_ent, hits_ks, filter_s_test, filter_o_test, n_sample=None
+    )
 
     hits1, hits3, hits10 = hits
 
