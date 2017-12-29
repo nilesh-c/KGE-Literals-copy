@@ -25,6 +25,10 @@ parser.add_argument('--negative_samples', type=int, default=10, metavar='',
                     help='number of negative samples per positive sample  (default: 10)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
+parser.add_argument('--h_dim', type=int, default=50, metavar='',
+                    help='Dimension of hidden layer in ER-MLP (default: 5)')
+parser.add_argument('--p', type=float, default=0.5, metavar='',
+                    help='Dropout Probability (default: 0.5)')
 parser.add_argument('--average_loss', default=False, action='store_true',
                     help='whether to average or sum the loss over minibatch')
 parser.add_argument('--lr', type=float, default=0.01, metavar='',
@@ -58,8 +62,10 @@ C = args.negative_samples #negative samples
 n_epoch = args.nepoch
 average_loss = args.average_loss
 lr = args.lr
+p = args.p
 lr_decay_every = args.lr_decay_every
 weight_decay = args.weight_decay
+h_dim = args.h_dim
 embeddings_lambda = args.embeddings_lambda
 normalize_embed = args.normalize_embed
 print_every = args.log_interval
@@ -95,63 +101,76 @@ val_literal_s = load_npz('data/fb15k-literal/bin/val_literal_s.npz').todense().a
 val_literal_o = load_npz('data/fb15k-literal/bin/val_literal_o.npz').todense().astype(np.float32)
 
 # Load Text Literals
-stringliteral_id = np.load('data/fb15k-literal/entity2stringliteral.npy')
-stringliteral_reprsn = np.load('data/fb15k-literal/entity_string_literal_reprsn.npy').astype('float32')
+textliteral_id = np.load('data/fb15k-literal/entity2stringliteral.npy')
+textliteral_reprsn = np.load('data/fb15k-literal/entity_string_literal_reprsn.npy').astype('float32')
+n_text = textliteral_reprsn.shape[1]
+dim_text = textliteral_reprsn.shape[2] 
 
+textliteral_reprsn = {i:textliteral_reprsn[0] for i in range(textliteral_reprsn.shape[0])}
+empty = len(idx2entity)+1
+textliteral_reprsn[empty] = np.zeros((n_text,dim_text))
+
+def idx2array(textliteral_reprsn, idx):
+    pdb.set_trace()
+    data = [textliteral_reprsn[el] for el in idx]
+    data = np.array(data, dtype='float32')
+    return data
 # Split Text literals
-train_string_s = []
-train_string_o = []
+train_text_s = []
+train_text_o = []
 for triple in X_train:
-    idx_s = np.where(idx2entity[triple[0]]==stringliteral_id)[0]
-    idx_o = np.where(idx2entity[triple[2]]==stringliteral_id)[0]
-
+    idx_s = np.where(idx2entity[triple[0]]==textliteral_id)[0]
+    idx_o = np.where(idx2entity[triple[2]]==textliteral_id)[0]
     if idx_s:
-        train_string_s.append(stringliteral_reprsn[idx_s[0]])
+        train_text_s.append(idx_s[0])
     else:
-        train_string_s.append(np.zeros(384))
+        train_text_s.append(empty)
     if idx_o:
-        train_string_o.append(stringliteral_reprsn[idx_o[0]])
+        train_text_o.append(idx_o[0])
     else:
-        train_string_o.append(np.zeros(384))
+        train_text_o.append(empty)
 
+train_text_s = np.array(train_text_s)
+train_text_o = np.array(train_text_o)
 
-train_string_s = np.array(train_string_s)
-train_string_o = np.array(train_string_o)
-val_string_s = []
-val_string_o = []
+val_text_s = []
+val_text_o = []
 for triple in X_val:
-    idx_s = np.where(idx2entity[triple[0]]==stringliteral_id)[0]
-    idx_o = np.where(idx2entity[triple[2]]==stringliteral_id)[0]
+    idx_s = np.where(idx2entity[triple[0]]==textliteral_id)[0]
+    idx_o = np.where(idx2entity[triple[2]]==textliteral_id)[0]
     if idx_s:
-        val_string_s.append(stringliteral_reprsn[idx_s[0]])
+        val_text_s.append(idx_s[0])
     else:
-        val_string_s.append(np.zeros(384))
+        val_text_s.append(empty)
     if idx_o:    
-        val_string_o.append(stringliteral_reprsn[idx_o[0]])
+        val_text_o.append(idx_o[0])
     else:
-        val_string_o.append(np.zeros(384))
+        val_text_o.append(empty)
 
-val_string_s = np.array(val_string_s)
-val_string_o = np.array(val_string_o)
+val_text_s = np.array(val_text_s)
+val_text_o = np.array(val_text_o)
 
-n_l = train_literal_s.shape[1]
-n_text = train_string_s.shape[1]
+val_text_s = idx2array(textliteral_reprsn, val_text_s)
+val_text_o = idx2array(textliteral_reprsn, val_text_o)
+
+n_numeric = train_literal_s.shape[1]
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
  
 # Initialize model
 #model = DistMult_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
-model = RESCAL_literal(n_e, n_r, embedding_size, embeddings_lambda, n_l, n_text, gpu=use_gpu)
+#model = RESCAL_literal(n_e, n_r,embedding_size , embeddings_lambda, n_l, n_text, gpu=use_gpu)
+
+model = ERMLP_literal1(n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric, n_text, dim_text, numeric = True, text=True, gpu=True)
 # Training params
 #solver = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
 solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 checkpoint_dir = '{}/fb-15k'.format(checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/rescal_rank.bin'.format(checkpoint_dir)
+checkpoint_path = '{}/ermlp_rank.bin'.format(checkpoint_dir)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
-
 
 
 # Begin training
@@ -183,13 +202,14 @@ for epoch in range(n_epoch):
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
         train_literal_s_mb = train_literal_s[X_train_mb[:,0]]
         train_literal_o_mb = train_literal_o[X_train_mb[:,2]]
-        train_string_s_mb = train_string_s[X_train_mb[:,0]]
-        train_string_o_mb = train_string_o[X_train_mb[:,2]]
-        
+
+        train_text_s_mb = idx2array(textliteral_reprsn, train_text_s[X_train_mb[:,0]])
+        train_text_o_mb = idx2array(textliteral_reprsn, train_text_o[X_train_mb[:,2]])
+        pdb.set_trace()       
         if loss_type =='logloss':
-            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_string_s_mb, train_string_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_string_s_mb, train_string_o_mb)       
+            X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb)       
         # Training step
-        y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb, train_string_s_mb, train_string_o_mb)
+        y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb)
         if loss_type == 'rankloss':
             y_pos, y_neg = y[:m], y[m:]
             loss = model.ranking_loss(
@@ -208,7 +228,8 @@ for epoch in range(n_epoch):
         # Training logs
         if it % print_every == 0:
             if loss_type =='logloss':
-                pred = model.predict(X_train_mb, val_literal_s, val_literal_o, val_string_s, val_string_o, sigmoid=True)
+                #pred = model.predict(X_train_mb, val_literal_s, val_literal_o, val_string_s, val_string_o, sigmoid=True)
+                pred = model.predict(X_train_mb, val_literal_s, val_literal_o, val_text_s, val_text_o)
                 train_acc = accuracy(pred, y_true_mb)
                 # Per class training accuracy
                 pos_acc = accuracy(pred[:m], y_true_mb[:m])
@@ -231,7 +252,7 @@ for epoch in range(n_epoch):
             else:
                 n_sample = 100
                 k = 10
-                mr, mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o, val_string_s, val_string_o)
+                mr, mrr, hits10 = eval_embeddings(model, X_val, n_e, k, n_sample, val_literal_s, val_literal_o, val_text_s, val_text_o)
             # For TransE, show loss, mrr & hits@10
             print('Iter-{}; loss: {:.4f}; val_mrr: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
                   .format(it, loss.data[0], mrr, hits10, end-start))
