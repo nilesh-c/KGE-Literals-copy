@@ -180,8 +180,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     return mr, mrr, hitsk
 
 
-# Some Utilities
-def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, n_sample=100, gpu= True):
+def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, n_sample=100):
     M = X_test.shape[0]
 
     if n_sample is not None:
@@ -198,22 +197,17 @@ def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None
 
         x = x.reshape(1, -1)
         y_h, y_t = model.predict_all(x)
+
         # Filtered setting
         y_h, y_t = y_h.data, y_t.data
-        y_h = y_h.view(y_h.numel())
-        y_t = y_t.view(y_h.numel())
         true_h, true_t = y_h[h], y_t[t]
 
         if filter_h is not None:
-            if gpu:  
-                y_h[torch.LongTensor(filter_h[idx]).cuda()] = np.inf
-            else:
-                y_h[torch.LongTensor(filter_h[idx])] = np.inf                
+            y_h[filter_h[idx]] = np.inf
+
         if filter_t is not None:
-            if gpu:  
-                y_t[torch.LongTensor(filter_t[idx]).cuda()] = np.inf
-            else:
-                y_t[torch.LongTensor(filter_t[idx])] = np.inf 
+            y_t[filter_t[idx]] = np.inf
+
         y_h[h] = true_h
         y_t[t] = true_t
 
@@ -221,11 +215,8 @@ def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None
         _, ranking_h = torch.sort(y_h)
         _, ranking_t = torch.sort(y_t)
 
-        ranking_h = ranking_h.cpu().numpy()
-        ranking_t = ranking_t.cpu().numpy()
-
-        ranks_h[i] = np.where(ranking_h == h)[0][0] + 1
-        ranks_t[i] = np.where(ranking_t == t)[0][0] + 1
+        ranks_h[i] = int((ranking_h == h).nonzero()) + 1
+        ranks_t[i] = int((ranking_t == t).nonzero()) + 1
 
     # Mean rank
     mr = (np.mean(ranks_h) + np.mean(ranks_t)) / 2
