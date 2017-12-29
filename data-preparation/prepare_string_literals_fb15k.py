@@ -34,27 +34,20 @@ for triple in triples:
 # Prepare literal dataset
 filtered_triples_transpose = list(zip(*filtered_triples))
 unique_entities = list(set(filtered_triples_transpose[0]))
-text_literal_reprsn = {entity:[] for entity in unique_entities}
+unique_literal_relations = list(set(filtered_triples_transpose[1]))
+text_literal_reprsn = np.zeros((len(unique_entities),len(unique_literal_relations),384), dtype='float32')
 for triple in filtered_triples:
+		entity = triple[0]
 		literal = triple[2]
-		if literal != 'unknown':
-			literal_reprsn = nlp(literal).vector
-		else:
-			literal_reprsn = np.zeros(384)
-		text_literal_reprsn[triple[0]].append(literal_reprsn)
-
-reprsn_text = []
-entity_ = []
-for entity,reprsn in text_literal_reprsn.items():
-	if len(reprsn)>1:
-		reprsn_text.append(np.average(np.array(reprsn), axis=0))
-	else:
-		reprsn_text.append(np.array(reprsn))
-	entity = entity.replace('<http://rdf.freebase.com/ns/','')[:-1]
-	entity_.append(entity)
-reprsn_text = np.array(reprsn_text)
-np.save('../data/fb15k-literal/entity2stringliteral.npy', np.array(entity_))
-np.save('../data/fb15k-literal/entity_string_literal_reprsn.npy', np.array(reprsn_text))	
+		literal_relation = triple[1]
+		if literal == 'unknown':
+			continue
+		literal_reprsn = nlp(literal).vector
+		idx_lit = unique_literal_relations.index(literal_relation)
+		idx_ent = unique_entities.index(entity)
+		text_literal_reprsn[idx_ent,idx_lit,:] = literal_reprsn
+np.save('../data/fb15k-literal/entity2stringliteral.npy', np.array(unique_entities))
+np.save('../data/fb15k-literal/entity_string_literal_reprsn.npy', text_literal_reprsn)	
 
 with open('../data/fb15k-literal/filtered-string-literal-fb15k.txt','w') as f:
 	for triple in filtered_triples:
