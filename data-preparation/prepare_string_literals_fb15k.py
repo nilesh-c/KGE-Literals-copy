@@ -46,6 +46,8 @@ for triple in filtered_triples:
 		idx_lit = unique_literal_relations.index(literal_relation)
 		idx_ent = unique_entities.index(entity)
 		text_literal_reprsn[idx_ent,idx_lit,:] = literal_reprsn
+
+unique_entities = [entity.replace('<http://rdf.freebase.com/ns/','')[:-1] for entity in unique_entities]
 np.save('../data/fb15k-literal/entity2stringliteral.npy', np.array(unique_entities))
 np.save('../data/fb15k-literal/entity_string_literal_reprsn.npy', text_literal_reprsn)	
 
