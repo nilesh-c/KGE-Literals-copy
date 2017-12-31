@@ -227,10 +227,8 @@ class ERMLP_literal1(Model):
         if numeric:
             n_input += 2*n_numeric
         if text:
-            self.attn_weights_s = nn.Embedding(self.n_text, 1)
-            self.attn_weights_o = nn.Embedding(self.n_text, 1)
-            xavier_normal(self.attn_weights_s.weight.data)
-            xavier_normal(self.attn_weights_o.weight.data)
+            self.attn_weights_s = nn.Parameter(torch.randn(self.n_text, 1))
+            self.attn_weights_o = nn.Parameter(torch.randn(self.n_text, 1))
             n_input += 2*dim_text
 
         self.mlp = nn.Sequential(
@@ -261,21 +259,21 @@ class ERMLP_literal1(Model):
             ls = Variable(torch.from_numpy(ls).cuda())
             ts = Variable(torch.from_numpy(ts).cuda())
             if self.numeric:
-                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s).cuda())
-                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o).cuda())
+                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s).cuda(),requires_grad=False)
+                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o).cuda(),requires_grad=False)
             if self.text:
-                text_lit_s = Variable(torch.from_numpy(text_lit_s).cuda())
-                text_lit_o = Variable(torch.from_numpy(text_lit_o).cuda())
+                text_lit_s = Variable(torch.from_numpy(text_lit_s).cuda(),requires_grad=False)
+                text_lit_o = Variable(torch.from_numpy(text_lit_o).cuda(),requires_grad=False)
         else:
             hs = Variable(torch.from_numpy(hs))
             ls = Variable(torch.from_numpy(ls))
             ts = Variable(torch.from_numpy(ts))
             if self.numeric:
-                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
-                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
+                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s),requires_grad=False)
+                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o),requires_grad=False)
             if self.text:
-                text_lit_s = Variable(torch.from_numpy(text_lit_s))
-                text_lit_o = Variable(torch.from_numpy(text_lit_o))
+                text_lit_s = Variable(torch.from_numpy(text_lit_s),requires_grad=False)
+                text_lit_o = Variable(torch.from_numpy(text_lit_o),requires_grad=False)
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -286,13 +284,160 @@ class ERMLP_literal1(Model):
         if self.numeric and not self.text:
             phi = torch.cat([e_hs, numeric_lit_s, e_ts, numeric_lit_o, e_ls], 1)  # M x (3k + numeric)
         elif self.text and not self.numeric:
-            weighted_text_s = torch.bmm(self.attn_weights_s.unsqueeze(0),text_lit_s.unsqueeze(0))
-            weighted_text_o = torch.bmm(self.attn_weights_o.unsqueeze(0),text_lit_o.unsqueeze(0))
+            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X),1,1),text_lit_s).view(len(X),self.dim_text)
+            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X),1,1),text_lit_o).view(len(X),self.dim_text)
             phi = torch.cat([e_hs, weighted_text_s, e_ts, weighted_text_o, e_ls], 1)  # M x (3k + text)
         elif self.numeric and self.text:
-            weighted_text_s = torch.bmm(self.attn_weights_s.unsqueeze(0),text_lit_s.unsqueeze(0))
-            weighted_text_o = torch.bmm(self.attn_weights_o.unsqueeze(0),text_lit_o.unsqueeze(0))
+            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X),1,1),text_lit_s).view(len(X),self.dim_text)
+            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X),1,1),text_lit_o).view(len(X),self.dim_text)
             phi = torch.cat([e_hs, weighted_text_s, numeric_lit_s, e_ts, weighted_text_o, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
+        else:
+            phi = torch.cat([e_hs, e_ts, e_ls])
+        y = self.mlp(phi)
+
+        return y.view(-1, 1)
+
+    def predict(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o):
+        y_pred = self.forward(X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o).view(-1, 1)
+        if self.gpu:
+            return y_pred.cpu().data.numpy()
+        else:
+            return y_pred.data.numpy()
+
+@inherit_docstrings
+class ERMLP_literal2(Model):
+    """
+    ER-MLP: Entity-Relation MLP
+    ---------------------------
+    Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
+    """
+
+    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, vocab_size, dim_text, pretrained_embeddings, numeric = True, text=True, gpu=False):
+        """
+        ER-MLP: Entity-Relation MLP
+        ---------------------------
+
+        Params:
+        -------
+            n_e: int
+                Number of entities in dataset.
+
+            n_r: int
+                Number of relationships in dataset.
+
+            k: int
+                Embedding size.
+
+            h_dim: int
+                Size of hidden layer.
+
+            p: float
+                Dropout rate.
+
+            lam: float
+                Prior strength of the embeddings. Used to constaint the
+                embedding norms inside a (euclidean) unit ball. The prior is
+                Gaussian, this param is the precision.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
+        """
+        super(ERMLP_literal2, self).__init__(gpu)
+
+        # Hyperparams
+        self.n_e = n_e
+        self.n_r = n_r
+        self.k = k
+        self.h_dim = h_dim
+        self.p = p
+        self.lam = lam
+        self.n_numeric = n_numeric
+        self.vocab_size = vocab_size
+        self.dim_text = dim_text
+        self.numeric = numeric
+        self.text = text
+        # Nets
+        self.emb_E = nn.Embedding(self.n_e, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
+
+        # Determine MLP input size
+        n_input = 3*k
+        if numeric:
+            n_input += 2*n_numeric
+        if text:
+            n_input += 2*dim_text
+            self.word_embeddings = nn.Embedding(self.vocab_size, self.dim_text)
+            self.word_embeddings.weight.data.copy_(torch.from_numpy(pretrained_embeddings))
+            self.lstm_s = nn.LSTM(self.dim_text, self.k)
+            self.lstm_o = nn.LSTM(self.dim_text, self.k)
+            self.hidden = self.init_hidden()
+        
+        self.mlp = nn.Sequential(
+            nn.Linear(n_input, h_dim),
+            nn.ReLU(),
+            nn.Dropout(p=self.p),
+            nn.Linear(h_dim, 1),
+        )
+
+        self.embeddings = [self.emb_E, self.emb_R]
+        self.initialize_embeddings()
+        # Xavier init
+        for p in self.mlp.modules():
+            if isinstance(p, nn.Linear):
+                in_dim = p.weight.size(0)
+                p.weight.data.normal_(0, 1/np.sqrt(in_dim/2))
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
+    def init_hidden(self):
+        # the first is the hidden h
+        # the second is the cell  c
+        return (autograd.Variable(torch.zeros(1, 1, self.h_dim)),
+                autograd.Variable(torch.zeros(1, 1, self.h_dim)))
+
+    def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o, numeric=True, text=True):
+        # Decompose X into head, relationship, tail
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+        if self.text:
+            embed_lit_s = self.word_embeddings(text_lit_s)
+            embed_lit_o = self.word_embeddings(text_lit_o)
+            x_s = text_lit_s.view(len(text_lit_s), len(X), -1)
+            lstm_s_out, self.hidden = self.lstm_s(x_s, self.hidden)
+            lstm_s_out = lstm_s_out[-1]
+            x_p = text_lit_s.view(len(text_lit_o), len(X), -1)
+            lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
+            lstm_o_out = lstm_o_out[-1]
+        if self.gpu:
+            hs = Variable(torch.from_numpy(hs).cuda())
+            ls = Variable(torch.from_numpy(ls).cuda())
+            ts = Variable(torch.from_numpy(ts).cuda())
+            if self.numeric:
+                numeric_lit_s = torch.from_numpy(numeric_lit_s).cuda()
+                numeric_lit_o = torch.from_numpy(numeric_lit_o).cuda()
+        else:
+            hs = Variable(torch.from_numpy(hs))
+            ls = Variable(torch.from_numpy(ls))
+            ts = Variable(torch.from_numpy(ts))
+            if self.numeric:
+                numeric_lit_s = torch.from_numpy(numeric_lit_s)
+                numeric_lit_o = torch.from_numpy(numeric_lit_o)
+
+        # Project to embedding, each is M x k
+        e_hs = self.emb_E(hs)
+        e_ts = self.emb_E(ts)
+        e_ls = self.emb_R(ls)
+
+        # Forward
+        if self.numeric and not self.text:
+            phi = torch.cat([e_hs, numeric_lit_s, e_ts, numeric_lit_o, e_ls], 1)  # M x (3k + numeric)
+        elif self.text and not self.numeric:
+            phi = torch.cat([e_hs, weighted_text_s, e_ts, weighted_text_o, e_ls], 1)  # M x (3k + text)
+        elif self.numeric and self.text:
+            weighted_text_s = torch.bmm(self.attn_weights_s.weight.data.t().unsqueeze(0).repeat(len(X),1,1),text_lit_s)
+            weighted_text_o = torch.bmm(self.attn_weights_o.weight.data.t().unsqueeze(0).repeat(len(X),1,1),text_lit_o)
+            phi = torch.cat([e_hs, lstm_s_out, numeric_lit_s, e_ts, lstm_s_out, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
         else:
             phi = torch.cat([e_hs, e_ts, e_ls])
         y = self.mlp(phi)
