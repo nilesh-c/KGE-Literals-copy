@@ -4,11 +4,11 @@ import time
 import numpy as np
 import pickle
 import gensim
-from data_preparation.text_data_utils import *
+from text_data_utils import *
 
 def load_glove(filename):
     embedding_map_pretrained = {}
-    f = open('data/fb15k-literal/'+filename,'rb')
+    f = open('data/fb15k-literal/glove.6B/'+filename,'rb')
     for line in f:
         pair = line.split()
         word = pair[0]
@@ -32,3 +32,7 @@ def pretrained_embeddings(filename='glove.6B.100d.txt', embedding_dim=100):
 
     with open('data/fb15k-literal/bin/pretrained-embedding.pickle', 'wb') as f:
         pickle.dump(embedding_weights, f)
+
+filename = 'glove.6B.100d.txt'
+embedding_dim = 100
+pretrained_embeddings(filename, embedding_dim)

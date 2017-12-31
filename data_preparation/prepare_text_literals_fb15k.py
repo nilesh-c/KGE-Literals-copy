@@ -50,7 +50,7 @@ unique_entities = [entity.replace('<http://rdf.freebase.com/ns/','')[:-1] for en
 np.save('data/fb15k-literal/entity2stringliteral.npy', np.array(unique_entities))
 np.save('data/fb15k-literal/entity_string_literal_reprsn.npy', text_literal_reprsn)	
 
-with open('sdata/fb15k-literal/filtered-string-literal-fb15k.txt','w') as f:
+with open('data/fb15k-literal/filtered-string-literal-fb15k.txt','w') as f:
 	for triple in filtered_triples:
 		f.write(triple[0] + '\t' + triple[1] + '\t' + triple[2] + '\n')		
 
