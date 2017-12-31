@@ -12,6 +12,7 @@ from sklearn.utils import shuffle as skshuffle
 import pdb
 from scipy.sparse import load_npz
 import argparse
+import pickle
 
 parser = argparse.ArgumentParser(
     description='Train RESCAL for numeric and text literal-dataset'
@@ -25,7 +26,7 @@ parser.add_argument('--negative_samples', type=int, default=10, metavar='',
                     help='number of negative samples per positive sample  (default: 10)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
-parser.add_argument('--h_dim', type=int, default=50, metavar='',
+parser.add_argument('--h_dim', type=int, default=100, metavar='',
                     help='Dimension of hidden layer in ER-MLP (default: 5)')
 parser.add_argument('--p', type=float, default=0.5, metavar='',
                     help='Dropout Probability (default: 0.5)')
@@ -103,10 +104,16 @@ val_literal_o = load_npz('data/fb15k-literal/bin/val_literal_o.npz').todense().a
 # Load Text Vocabulary
 with open('data/fb15k-literal/vocabulary_text.pickle', 'rb') as f:
    vocabulary = pickle.load(f)
-vocab_size_text = len(vocabulary_inv_list)
+vocab_size_text = len(vocabulary)
 # Pretrained-Embeddings-for-text
 with open('data/fb15k-literal/bin/pretrained-embedding.pickle', 'rb') as f:
     embedding_weights = pickle.load(f)
+# Load Text Literals
+train_text_s = load_npz('data/fb15k-literal/bin/train_text_s.npz').toarray()
+train_text_o = load_npz('data/fb15k-literal/bin/train_text_o.npz').toarray()
+
+val_text_s = load_npz('data/fb15k-literal/bin/val_text_s.npz').toarray()
+val_text_o = load_npz('data/fb15k-literal/bin/val_text_o.npz').toarray()
 
 embedding_weights = np.array(list(embedding_weights.values()))
 dim_text = embedding_weights.shape[1]
@@ -117,15 +124,15 @@ M_val = X_val.shape[0]
 # Initialize model
 #model = DistMult_literal(n_e, n_r, n_l, k, lam, gpu=use_gpu)
 #model = RESCAL_literal(n_e, n_r,embedding_size , embeddings_lambda, n_l, n_text, gpu=use_gpu)
-
-model = ERMLP_literal2(n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric, vocab_size_text, dim_text, embedding_weights, numeric = True, text=True, gpu=True)
-model.word_embeddings.weight.data = text_field.vocab.vectors
+batch_size = mb_size + C*mb_size
+text_length = 50
+model = ERMLP_literal2(n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric, vocab_size_text, dim_text, embedding_weights, batch_size, text_length, numeric = True, text=True, gpu=True)
 
 # Training params
 #solver = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
 solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 checkpoint_dir = '{}/fb-15k'.format(checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/ermlp_rank.bin'.format(checkpoint_dir)
+checkpoint_path = '{}/lstm_text_ermlp_rank.bin'.format(checkpoint_dir)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
@@ -139,7 +146,6 @@ for epoch in range(n_epoch):
     it = 0
     # Shuffle and chunk data into minibatches
     mb_iter = get_minibatches(X_train, mb_size, shuffle=True)
-
     # Anneal learning rate
     lr = lr * (0.5 ** (epoch // lr_decay_every))
     for param_group in solver.param_groups:
@@ -161,12 +167,13 @@ for epoch in range(n_epoch):
         train_literal_s_mb = train_literal_s[X_train_mb[:,0]]
         train_literal_o_mb = train_literal_o[X_train_mb[:,2]]
 
-        train_text_s_mb = idx2array(textliteral_reprsn, train_text_s[X_train_mb[:,0]])
-        train_text_o_mb = idx2array(textliteral_reprsn, train_text_o[X_train_mb[:,2]])
+        train_text_s_mb = train_text_s[X_train_mb[:,0]]
+        train_text_o_mb = train_text_o[X_train_mb[:,2]]
         if loss_type =='logloss':
             X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb = skshuffle(X_train_mb, y_true_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb)       
         # Training step
         y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb)
+
         if loss_type == 'rankloss':
             y_pos, y_neg = y[:m], y[m:]
             loss = model.ranking_loss(
