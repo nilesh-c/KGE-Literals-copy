@@ -312,7 +312,7 @@ class ERMLP_literal2(Model):
     Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
     """
 
-    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, vocab_size, dim_text, pretrained_embeddings, numeric = True, text=True, gpu=False):
+    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, vocab_size, dim_text, pretrained_embeddings, batch_size, text_length, numeric = True, text=True, gpu=False):
         """
         ER-MLP: Entity-Relation MLP
         ---------------------------
@@ -356,6 +356,8 @@ class ERMLP_literal2(Model):
         self.dim_text = dim_text
         self.numeric = numeric
         self.text = text
+        self.batch_size = batch_size
+        self.text_length = text_length
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_R = nn.Embedding(self.n_r, self.k)
@@ -365,7 +367,7 @@ class ERMLP_literal2(Model):
         if numeric:
             n_input += 2*n_numeric
         if text:
-            n_input += 2*dim_text
+            n_input += 2*self.k
             self.word_embeddings = nn.Embedding(self.vocab_size, self.dim_text)
             self.word_embeddings.weight.data.copy_(torch.from_numpy(pretrained_embeddings))
             self.lstm_s = nn.LSTM(self.dim_text, self.k)
@@ -394,35 +396,47 @@ class ERMLP_literal2(Model):
     def init_hidden(self):
         # the first is the hidden h
         # the second is the cell  c
-        return (autograd.Variable(torch.zeros(1, 1, self.h_dim)),
-                autograd.Variable(torch.zeros(1, 1, self.h_dim)))
+        if self.gpu:
+            return (Variable(torch.zeros(1, self.batch_size, self.k).cuda()),
+                Variable(torch.zeros(1, self.batch_size, self.k).cuda()))
+        else:
+            return (Variable(torch.zeros(1, self.batch_size, self.k)),
+                Variable(torch.zeros(1, self.batch_size, self.k)))
 
     def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o, numeric=True, text=True):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-        if self.text:
-            embed_lit_s = self.word_embeddings(text_lit_s)
-            embed_lit_o = self.word_embeddings(text_lit_o)
-            x_s = text_lit_s.view(len(text_lit_s), len(X), -1)
-            lstm_s_out, self.hidden = self.lstm_s(x_s, self.hidden)
-            lstm_s_out = lstm_s_out[-1]
-            x_p = text_lit_s.view(len(text_lit_o), len(X), -1)
-            lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
-            lstm_o_out = lstm_o_out[-1]
         if self.gpu:
             hs = Variable(torch.from_numpy(hs).cuda())
             ls = Variable(torch.from_numpy(ls).cuda())
             ts = Variable(torch.from_numpy(ts).cuda())
+            if self.text:
+                text_lit_s = Variable(torch.from_numpy(text_lit_s).cuda())
+                text_lit_o = Variable(torch.from_numpy(text_lit_o).cuda())
             if self.numeric:
-                numeric_lit_s = torch.from_numpy(numeric_lit_s).cuda()
-                numeric_lit_o = torch.from_numpy(numeric_lit_o).cuda()
+                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s).cuda(),requires_grad=False)
+                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o).cuda(),requires_grad=False)
         else:
             hs = Variable(torch.from_numpy(hs))
             ls = Variable(torch.from_numpy(ls))
             ts = Variable(torch.from_numpy(ts))
+            if self.text:
+                text_lit_s = Variable(torch.from_numpy(text_lit_s))
+                text_lit_o = Variable(torch.from_numpy(text_lit_o))                        
             if self.numeric:
-                numeric_lit_s = torch.from_numpy(numeric_lit_s)
-                numeric_lit_o = torch.from_numpy(numeric_lit_o)
+                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s),requires_grad=False)
+                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o),requires_grad=False)
+        if self.text:
+            text_lit_s = text_lit_s.t()
+            text_lit_o = text_lit_o.t()
+            embed_lit_s = self.word_embeddings(text_lit_s)
+            embed_lit_o = self.word_embeddings(text_lit_s)
+            x_s = embed_lit_s.view(self.text_length, self.batch_size, -1)
+            lstm_s_out, self.hidden = self.lstm_s(x_s, self.hidden)
+            lstm_s_out = lstm_s_out[-1]
+            x_p = embed_lit_o.view(self.text_length, self.batch_size, -1)
+            lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
+            lstm_o_out = lstm_o_out[-1]
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -433,19 +447,16 @@ class ERMLP_literal2(Model):
         if self.numeric and not self.text:
             phi = torch.cat([e_hs, numeric_lit_s, e_ts, numeric_lit_o, e_ls], 1)  # M x (3k + numeric)
         elif self.text and not self.numeric:
-            phi = torch.cat([e_hs, weighted_text_s, e_ts, weighted_text_o, e_ls], 1)  # M x (3k + text)
+            phi = torch.cat([e_hs, lstm_s_out, e_ts, lstm_o_out, e_ls], 1)  # M x (3k + text)
         elif self.numeric and self.text:
-            weighted_text_s = torch.bmm(self.attn_weights_s.weight.data.t().unsqueeze(0).repeat(len(X),1,1),text_lit_s)
-            weighted_text_o = torch.bmm(self.attn_weights_o.weight.data.t().unsqueeze(0).repeat(len(X),1,1),text_lit_o)
-            phi = torch.cat([e_hs, lstm_s_out, numeric_lit_s, e_ts, lstm_s_out, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
+            phi = torch.cat([e_hs, lstm_s_out, numeric_lit_s, e_ts, lstm_o_out, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
         else:
-            phi = torch.cat([e_hs, e_ts, e_ls])
+            phi = torch.cat([e_hs, e_ts, e_ls],1)
         y = self.mlp(phi)
-
         return y.view(-1, 1)
 
     def predict(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o):
-        y_pred = self.forward(X, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o).view(-1, 1)
+        y_pred = self.forward(X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o).view(-1, 1)
         if self.gpu:
             return y_pred.cpu().data.numpy()
         else:
