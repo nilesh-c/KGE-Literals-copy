@@ -49,6 +49,8 @@ parser.add_argument('--test', default=False, action='store_true',
                     help='Activate test mode: gather results on test set only with trained model.')
 parser.add_argument('--test_model', default='mtkgnn', metavar='',
                     help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
+parser.add_argument('--no_attr_loss', default=True, action='store_false',
+                    help='disable attribute loss (thus equivalent to ERMLP)')
 
 args = parser.parse_args()
 
@@ -81,20 +83,6 @@ X_test = np.load('data/fb15k-literal/bin/test.npy').astype(int)
 X_lit_s_train = load_npz('data/fb15k-literal/bin/train_literal_s.npz').todense().astype(np.float32)
 X_lit_o_train = load_npz('data/fb15k-literal/bin/train_literal_o.npz').todense().astype(np.float32)
 
-# Preprocess literals
-
-
-# def normalize(X, minn, maxx):
-#     return (X - minn) / (maxx - minn + 1e-8)
-
-
-# max_lit, min_lit = np.max(X_lit, axis=0), np.min(X_lit, axis=0)
-# X_lit = normalize(X_lit, max_lit, min_lit)
-
-# # Preload literals for validation
-# X_lit_s_val = X_lit[X_val[:, 0]]
-# X_lit_o_val = X_lit[X_val[:, 2]]
-
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
@@ -115,8 +103,8 @@ solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
-checkpoint_dir = '{}/yago'.format(args.checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/mtkgnn.bin'.format(checkpoint_dir)
+checkpoint_dir = '{}/fb15k'.format(args.checkpoint_dir.rstrip('/'))
+checkpoint_path = '{}/mtkgnn_lr{}_wd{}.bin'.format(checkpoint_dir, lr, wd)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
@@ -145,8 +133,7 @@ if args.test:
 
     hits1, hits3, hits10 = hits
 
-    # For TransE, show loss, mrr & hits@10
-    print('val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}'
+    print('MR: {:.4f}; MRR: {:.4f}; Hits@1: {:.4f}; Hits@3: {:.4f}; Hits@10: {:.4f}'
           .format(mr, mrr, hits1, hits3, hits10))
 
     # Quit immediately

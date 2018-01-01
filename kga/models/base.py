@@ -106,7 +106,7 @@ class Model(nn.Module):
 
         return nll + self.lam*nlp1 + self.lam*nlp2
 
-    def ranking_loss(self, y_pos, y_neg, margin=1, C=1, average=True):
+    def ranking_loss(self, y_pos, y_neg, margin=1, C=1, energy_based=False, average=True):
         """
         Compute loss max margin ranking loss.
 
@@ -124,6 +124,9 @@ class Model(nn.Module):
         C: int, default: 1
             Number of negative samples per positive sample.
 
+        energy_based: bool, default: False
+            Whether to treat score as energy => minimizing score.
+
         average: bool, default: True
             Whether to average the loss or just summing it.
 
@@ -136,13 +139,12 @@ class Model(nn.Module):
         y_pos = y_pos.view(-1).repeat(C)  # repeat to match y_neg
         y_neg = y_neg.view(-1)
 
-        # target = [-1, -1, ..., -1], i.e. y_neg should be higher than y_pos
-        target = -np.ones(M*C, dtype=np.float32)
+        target = Variable(torch.ones(M*C))
+        target = target.cuda() if self.gpu else target
 
-        if self.gpu:
-            target = Variable(torch.from_numpy(target).cuda())
-        else:
-            target = Variable(torch.from_numpy(target))
+        if energy_based:
+            # target = [-1, ..., -1], i.e. y_neg should be higher than y_pos
+            target = -target
 
         loss = F.margin_ranking_loss(
             y_pos, y_neg, target, margin=margin, size_average=average
