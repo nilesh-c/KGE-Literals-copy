@@ -644,3 +644,87 @@ class NTN(Model):
         g = torch.bmm(Ur, F.leaky_relu(quad + affine).view(-1, self.slice, 1))
 
         return g.view(-1, 1)
+
+class TransH(Model):
+    """
+    TransH embedding model
+    ----------------------
+    Wang, Zhen, et al. "Knowledge Graph Embedding by Translating on Hyperplanes." AAAI. 2014.
+    """
+
+    def __init__(self, n_e, n_r, k, gamma, d='l2', gpu=False):
+        """
+        TransH embedding model
+        ----------------------
+
+        Params:
+        -------
+            n_e: int
+                Number of entities in dataset.
+
+            n_r: int
+                Number of relationships in dataset.
+
+            k: int
+                Embedding size.
+
+            gamma: float
+                Margin size for TransE's hinge loss.
+
+            d: {'l1', 'l2'}
+                Distance measure to be used in the loss.
+
+            gpu: bool, default: False
+                Whether to use GPU or not.
+        """
+        super(TransH, self).__init__(gpu)
+
+        # Hyperparams
+        self.n_e = n_e  # Num of entities
+        self.n_r = n_r  # Num of rels
+        self.k = k
+        self.gamma = gamma
+        self.d = d
+
+        # Nets
+        self.emb_E = nn.Embedding(self.n_e, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
+        self.normal_vec = nn.Embedding(self.n_e, self.k)
+        self.embeddings = [self.emb_E, self.emb_R,self.normal_vec]
+        self.initialize_embeddings()
+
+        # Remove relation embeddings from list so that it won't normalized be
+        # during training.
+        self.embeddings = [self.emb_E]
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
+    def forward(self, X):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+
+        e_hs = self.emb_E(hs)
+        e_ts = self.emb_E(ts)
+        e_ls = self.emb_R(ls)
+        w_norm = self.normal_vec(ls)
+        e_hs = self.projection(e_hs, w_norm)
+        e_ts = self.projection(e_ts, w_norm)
+
+        f = self.energy(e_hs, e_ls, e_ts).view(-1, 1)
+
+        return f
+    def projection(self, entity, w_n):
+        norm = F.normalize(w_n, p=2, dim=1)  
+        return entity- torch.sum(entity*norm, 1, keepdim=True)      
+
+    def energy(self, h, l, t):
+        if self.d == 'l1':
+            out = torch.sum(torch.abs(h + l - t), 1, keepdim=True)
+        else:
+            out = torch.sqrt(torch.sum((h + l - t)**2, 1, keepdim=True))
+        return out
