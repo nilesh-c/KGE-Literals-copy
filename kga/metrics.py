@@ -180,7 +180,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     return mr, mrr, hitsk
 
 
-def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, n_sample=100):
+def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, descending=True, n_sample=100):
     M = X_test.shape[0]
 
     if n_sample is not None:
@@ -203,17 +203,17 @@ def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None
         true_h, true_t = y_h[h], y_t[t]
 
         if filter_h is not None:
-            y_h[filter_h[idx]] = np.inf
+            y_h[filter_h[idx]] = -np.inf if descending else np.inf
 
         if filter_t is not None:
-            y_t[filter_t[idx]] = np.inf
+            y_t[filter_t[idx]] = -np.inf if descending else np.inf
 
         y_h[h] = true_h
         y_t[t] = true_t
 
         # Do ranking
-        _, ranking_h = torch.sort(y_h)
-        _, ranking_t = torch.sort(y_t)
+        _, ranking_h = torch.sort(y_h, descending=descending)
+        _, ranking_t = torch.sort(y_t, descending=descending)
 
         ranks_h[i] = int((ranking_h == h).nonzero()) + 1
         ranks_t[i] = int((ranking_t == t).nonzero()) + 1
