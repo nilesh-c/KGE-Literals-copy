@@ -56,12 +56,14 @@ parser.add_argument('--log_interval', type=int, default=100, metavar='',
                     help='interval between training status logs (default: 100)')
 parser.add_argument('--checkpoint_dir', default='models/', metavar='',
                     help='directory to save model checkpoint, saved every epoch (default: models/)')
-parser.add_argument('--resume', default=False, type=bool, metavar='',
-                    help='resume the training from latest checkpoint (default: False')
 parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
+parser.add_argument('--test', default=False, action='store_true',
+                    help='Activate test mode: gather results on test set only with trained model.')
+parser.add_argument('--test_model', default=None, metavar='',
+                    help='Model name used for testing, the full path will be appended automatically')
 
 args = parser.parse_args()
 
@@ -98,6 +100,8 @@ except:
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
+lr = args.lr
+wd = args.weight_decay
 lam = args.embeddings_lambda
 C = args.negative_samples
 
@@ -112,24 +116,56 @@ models = {
 
 model = models[args.model]
 
-# Resume from latest checkpoint if specified
-if args.resume:
-    model.load_state_dict(
-        torch.load('models/{}/{}.bin'.format(args.dataset, args.model))
-    )
-
 # Training params
-solver = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
 checkpoint_dir = '{}/{}'.format(args.checkpoint_dir.rstrip('/'), args.dataset)
-checkpoint_path = '{}/{}.bin'.format(checkpoint_dir, args.model)
+checkpoint_path = '{}/{}_lr{}_wd{}.bin'.format(checkpoint_dir, args.model, lr, wd)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
 
 
+"""
+Test mode: Evaluate trained model on test set
+=============================================
+"""
+if args.test:
+    try:
+        filter_s_test = np.load('data/{}/bin/filter_s_test.npy')
+        filter_o_test = np.load('data/{}/bin/filter_o_test.npy')
+    except:
+        filter_s_test = None
+        filter_o_test = None
+
+    model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
+    state = torch.load(model_name, map_location=lambda storage, loc: storage)
+    model.load_state_dict(state)
+
+    model.eval()
+
+    hits_ks = [1, 3, 10]
+
+    # Use entire test set
+    mr, mrr, hits = eval_embeddings_vertical(
+        model, X_test, n_ent, hits_ks, filter_s_test, filter_o_test, n_sample=None
+    )
+
+    hits1, hits3, hits10 = hits
+
+    print('MR: {:.4f}; MRR: {:.4f}; Hits@1: {:.4f}; Hits@3: {:.4f}; Hits@10: {:.4f}'
+          .format(mr, mrr, hits1, hits3, hits10))
+
+    # Quit immediately
+    exit(0)
+
+
+"""
+Train mode: Train model from scratch
+====================================
+"""
 # Begin training
 for epoch in range(n_epoch):
     print('Epoch-{}'.format(epoch+1))
@@ -215,7 +251,7 @@ for epoch in range(n_epoch):
                 hits_ks = [1, 3, 10]
 
                 # Only use 100 samples of X_val
-                mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=None)
+                mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=500)
 
                 hits1, hits3, hits10 = hits
 
