@@ -223,7 +223,7 @@ for epoch in range(n_epoch):
         end = time()
 
         # Training logs
-        if it % print_every == 0:
+        if args.log_interval != -1 and it % print_every == 0:
             if args.loss == 'logloss':
                 # Training accuracy
                 pred = model.predict(X_train_mb, sigmoid=True)

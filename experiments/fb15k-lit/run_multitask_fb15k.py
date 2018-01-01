@@ -49,7 +49,7 @@ parser.add_argument('--test', default=False, action='store_true',
                     help='Activate test mode: gather results on test set only with trained model.')
 parser.add_argument('--test_model', default='mtkgnn', metavar='',
                     help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
-parser.add_argument('--no_attr_loss', default=True, action='store_false',
+parser.add_argument('--no_attr_loss', default=False, action='store_true',
                     help='disable attribute loss (thus equivalent to ERMLP)')
 
 args = parser.parse_args()
@@ -103,8 +103,9 @@ solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
+model_name = 'ermlp' if args.no_attr_loss else 'mtkgnn'
 checkpoint_dir = '{}/fb15k'.format(args.checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/mtkgnn_lr{}_wd{}.bin'.format(checkpoint_dir, lr, wd)
+checkpoint_path = '{}/{}_lr{}_wd{}.bin'.format(checkpoint_dir, model_name, lr, wd)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
@@ -200,12 +201,15 @@ for epoch in range(n_epoch):
             y_er_pos, y_er_neg, margin=1, C=C, average=args.average_loss
         )
 
-        # Attribute nets update
-        loss_lit_s = F.mse_loss(y_lit_s, y_true_lit_s)
-        loss_lit_o = F.mse_loss(y_lit_o, y_true_lit_o)
-        loss_lit = loss_lit_s + loss_lit_o
+        if args.no_attr_loss:
+            loss_total = loss_er
+        else:
+            # Attribute nets update
+            loss_lit_s = F.mse_loss(y_lit_s, y_true_lit_s)
+            loss_lit_o = F.mse_loss(y_lit_o, y_true_lit_o)
+            loss_lit = loss_lit_s + loss_lit_o
 
-        loss_total = loss_er + loss_lit
+            loss_total = loss_er + loss_lit
 
         loss_total.backward()
         solver.step()
