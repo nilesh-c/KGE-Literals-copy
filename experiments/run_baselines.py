@@ -133,9 +133,11 @@ Test mode: Evaluate trained model on test set
 =============================================
 """
 if args.test:
+    X_test = np.load('data/{}/bin/test.npy'.format(args.dataset))
+
     try:
-        filter_s_test = np.load('data/{}/bin/filter_s_test.npy')
-        filter_o_test = np.load('data/{}/bin/filter_o_test.npy')
+        filter_s_test = np.load('data/{}/bin/filter_s_test.npy'.format(args.dataset))
+        filter_o_test = np.load('data/{}/bin/filter_o_test.npy'.format(args.dataset))
     except:
         filter_s_test = None
         filter_o_test = None
@@ -150,7 +152,7 @@ if args.test:
 
     # Use entire test set
     mr, mrr, hits = eval_embeddings_vertical(
-        model, X_test, n_ent, hits_ks, filter_s_test, filter_o_test, n_sample=None
+        model, X_test, n_e, hits_ks, filter_s_test, filter_o_test, n_sample=None
     )
 
     hits1, hits3, hits10 = hits
