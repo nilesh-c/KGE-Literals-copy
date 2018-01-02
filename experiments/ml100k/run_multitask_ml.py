@@ -52,6 +52,8 @@ parser.add_argument('--test', default=False, action='store_true',
                     help='Activate test mode: gather results on test set only with trained model.')
 parser.add_argument('--test_model', default='mtkgnn', metavar='',
                     help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
+parser.add_argument('--no_attr_loss', default=False, action='store_true',
+                    help='disable attribute loss (thus equivalent to ERMLP)')
 
 args = parser.parse_args()
 
@@ -121,8 +123,9 @@ solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 n_epoch = args.nepoch
 mb_size = args.mbsize  # 2x with negative sampling
 print_every = args.log_interval
+model_name = 'ermlp' if args.no_attr_loss else 'mtkgnn'
 checkpoint_dir = '{}/ml-100k'.format(args.checkpoint_dir.rstrip('/'))
-checkpoint_path = '{}/mtkgnn.bin'.format(checkpoint_dir)
+checkpoint_path = '{}/{}_lr{}_wd{}.bin'.format(checkpoint_dir, model_name, lr, wd)
 
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
@@ -145,7 +148,7 @@ if args.test:
     hits1, hits2 = hits
 
     # For TransE, show loss, mrr & hits@10
-    print('val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f}'
+    print('MR: {:.4f}; MRR: {:.4f}; Hits@1: {:.4f}; Hits@2: {:.4f}'
           .format(mr, mrr, hits1, hits2))
 
     # Quit immediately
@@ -177,7 +180,7 @@ for epoch in range(n_epoch):
         # Build batch with negative sampling
         m = X_mb.shape[0]
         # C x M negative samples
-        X_neg_mb = np.vstack([sample_negatives_decoupled(X_mb, n_usr, n_mov)
+        X_neg_mb = np.vstack([sample_negatives_rel(X_mb, n_rat)
                               for _ in range(C)])
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
@@ -212,12 +215,15 @@ for epoch in range(n_epoch):
             y_er_pos, y_er_neg, margin=1, C=C, average=args.average_loss
         )
 
-        # Attribute nets update
-        loss_lit_usr = F.mse_loss(y_lit_usr, y_true_lit_usr)
-        loss_lit_mov = F.mse_loss(y_lit_mov, y_true_lit_mov)
-        loss_lit = loss_lit_usr + loss_lit_mov
+        if args.no_attr_loss:
+            loss_total = loss_er
+        else:
+            # Attribute nets update
+            loss_lit_usr = F.mse_loss(y_lit_usr, y_true_lit_usr)
+            loss_lit_mov = F.mse_loss(y_lit_mov, y_true_lit_mov)
+            loss_lit = loss_lit_usr + loss_lit_mov
 
-        loss_total = loss_er + loss_lit
+            loss_total = loss_er + loss_lit
 
         loss_total.backward()
         solver.step()
@@ -229,7 +235,7 @@ for epoch in range(n_epoch):
         end = time()
 
         # Training logs
-        if it % print_every == 0:
+        if args.log_interval != -1 and it % print_every == 0:
             model.eval()
 
             hits_ks = [1, 2]

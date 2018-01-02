@@ -127,6 +127,21 @@ def sample_negatives_decoupled(X, n_s, n_o):
     return X_corr
 
 
+def sample_negatives_rel(X, n_r):
+    M = X.shape[0]
+    X_corr = []
+
+    for x in X:
+        h, r, t = x[0], x[1], x[2]
+
+        rc = np.random.randint(n_r)
+        while rc == r: rc = np.random.randint(n_r)
+
+        X_corr.append([h, rc, t])
+
+    return np.array(X_corr, dtype=int)
+
+
 def get_dictionary(dataset_dir):
     """
     Let X be file consists of triples, return idx2ent and idx2rel dictionaries.

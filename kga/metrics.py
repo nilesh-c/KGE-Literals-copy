@@ -233,7 +233,7 @@ def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None
     return mr, mrr, hitsk
 
 
-def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit_img=None, X_lit_txt=None):
+def eval_embeddings_rel(model, X_test, n_r, k, descending=True, X_lit_s=None, X_lit_o=None, X_lit_img=None, X_lit_txt=None):
     """
     Compute Mean Reciprocal Rank and Hits@k score of embedding model by ranking
     relations. The procedure follows Bordes, et. al., 2011.
@@ -282,7 +282,7 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
 
     scores_r[:, 0] = y
 
-    for i, r in enumerate(np.arange(5)):  # [0 ... 4]
+    for i, r in enumerate(np.arange(n_r)):  # [0 ... 4]
         X_corr_r[:, 1] = r
 
         if X_lit_s is None or X_lit_o is None:
@@ -297,6 +297,9 @@ def eval_embeddings_rel(model, X_test, n_r, k, X_lit_s=None, X_lit_o=None, X_lit
     ranks_r = np.array(
         [st.rankdata(s)[r] for s, r in zip(scores_r, X_test[:, 1])]
     )
+
+    if descending:
+        ranks_r = n_r - ranks_r + 1
 
     # Mean rank
     mr = np.mean(ranks_r)
