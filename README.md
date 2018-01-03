@@ -1,101 +1,25 @@
 # KGE-Literals
 
-Knowledge Graph Analysis with literals in PyTorch.
-
-## List of Models
-
-1. RESCAL
-2. ER-MLP
-3. TransE
-4. DistMult
-5. NTN
+Link prediction with literals in PyTorch.
 
 ## Getting Started
 
 1. Install miniconda <http://conda.pydata.org/miniconda.html>
 2. Do `conda env create`
 3. Enter the env `source activate kga`
-4. Install [Pytorch](https://github.com/pytorch/pytorch#installation)
+4. Install [Pytorch v0.3+](https://github.com/pytorch/pytorch#installation)
 
-## Running the Models
-### Training
-```
-python run_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {NTN/wordnet,NTN/fb15k} --use_gpu
-```
-See `python run_baselines.py --help` for further options, e.g. hyperparameters:
+## Preparing new experiments
 
-```
-optional arguments:
-  -h, --help            show this help message and exit
-  --model               model to run: {rescal, distmult, ermlp, transe}
-                        (default: rescal)
-  --dataset             dataset to be used: {wordnet, fb15k} (default:
-                        wordnet)
-  --k                   embedding dim (default: 50)
-  --transe_gamma        TransE loss margin (default: 1)
-  --transe_metric       whether to use `l1` or `l2` metric for TransE
-                        (default: l2)
-  --mlp_h               size of ER-MLP hidden layer (default: 100)
-  --mlp_dropout_p       Probability of dropping out neuron in dropout
-                        (default: 0.5)
-  --ntn_slice           number of slices used in NTN (default: 4)
-  --mbsize              size of minibatch (default: 100)
-  --negative_samples    number of negative samples per positive sample
-                        (default: 10)
-  --nepoch              number of training epoch (default: 5)
-  --loss                loss function to be used, {"logloss", "rankloss"}
-                        (default: "logloss")
-  --average_loss        whether to average or sum the loss over minibatch
-  --lr                  learning rate (default: 0.1)
-  --lr_decay_every      decaying learning rate every n epoch (default: 10)
-  --weight_decay        L2 weight decay (default: 1e-4)
-  --embeddings_lambda   prior strength for embeddings. Constraints embeddings
-                        norms to at most one (default: 1e-2)
-  --normalize_embed     whether to normalize embeddings to unit euclidean ball
-                        (default: False)
-  --log_interval        interval between training status logs (default: 100)
-  --checkpoint_dir      directory to save model checkpoint, saved every epoch
-                        (default: models/)
-  --resume              resume the training from latest checkpoint (default:
-                        False
-  --use_gpu             whether to run in the GPU
-  --randseed            resume the training from latest checkpoint (default:
-                        False
-```
-
-### Testing
-**Note:** All hyperparameters of the model _must_ match those used during training.
-
-```
-python test_baselines.py --model {rescal,ermlp,distmult,transe} --dataset {NTN/wordnet,NTN/fb15k} --use_gpu
-```
-See `python test_baselines.py --help` for further options, e.g. hyperparameters:
-
-```
-optional arguments:
-  -h, --help            show this help message and exit
-  --model               model to run: {rescal, distmult, ermlp, transe}
-                        (default: rescal)
-  --dataset             dataset to be used: {wordnet, fb15k} (default:
-                        wordnet)
-  --k                   embedding dim (default: 50)
-  --transe_gamma        TransE loss margin (default: 1)
-  --transe_metric       whether to use `l1` or `l2` metric for TransE
-                        (default: l2)
-  --mlp_h               size of ER-MLP hidden layer (default: 100)
-  --mlp_dropout_p       Probability of dropping out neuron in dropout
-                        (default: 0.5)
-  --ntn_slice           number of slices used in NTN (default: 4)
-  --embeddings_lambda   prior strength for embeddings. Constraints embeddings
-                        norms to at most one (default: 1e-2)
-  --hit_k               hit@k metrics (default: 10)
-  --nn_n                number of entities/relations for nearest neighbours
-                        (default: 5)
-  --nn_k                k in k-nearest-neighbours (default: 5)
-  --use_gpu             whether to run in the GPU
-  --randseed            resume the training from latest checkpoint (default:
-                        False
-```
+1. Create your model in `kga/models/literals.py`.
+2. Create experiment script at `experiments/{fb15k,yago,ml}` dir. See baseline files `run_multitask_{fb15k,yago,ml}` for reference and use it as template.
+  * The script has to implements all of the variables as in the `run_multitask_{fb15k,yago,ml}`'s argument parsers.
+  * It is very important to use proper model name when saving the model file. Consult the reference above.
+3. Run the experiment, e.g. `nohup python -u experiments/yago3-10/run_multitask_yago.py --use_gpu --log_interval -1 --nepoch 300 --lr_decay_every 100 --k 100 --mbsize 200 --lr 1e-3 --weight_decay 5e-4 &> mtkgnn_yago_lr1e-3_wd5e-4 &`
+  * In the example above, tt will save a model in `models/yago/mtkgnn_yago_lr0.001_wd0.0001`
+4. After finished training, test the resulting model, e.g. `python experiments/yago3-10/run_multitask_yago.py --use_gpu --k 100 --test --test_model mtkgnn_yago_lr0.001_wd0.0001`
+  * This will load the models from the previous training.
+  * It will print all of the evaluation metrics over the test set.
 
 ## Dependencies
 
