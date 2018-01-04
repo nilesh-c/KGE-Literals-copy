@@ -38,8 +38,6 @@ parser.add_argument('--negative_samples', type=int, default=10, metavar='',
                     help='number of negative samples per positive sample  (default: 10)')
 parser.add_argument('--nepoch', type=int, default=5, metavar='',
                     help='number of training epoch (default: 5)')
-parser.add_argument('--loss', default='logloss', metavar='',
-                    help='loss function to be used, {"logloss", "rankloss"} (default: "logloss")')
 parser.add_argument('--average_loss', default=False, action='store_true',
                     help='whether to average or sum the loss over minibatch')
 parser.add_argument('--lr', type=float, default=0.1, metavar='',
@@ -87,16 +85,6 @@ n_r = len(idx2rel)
 X_train = np.load('data/{}/bin/train.npy'.format(args.dataset))
 X_val = np.load('data/{}/bin/val.npy'.format(args.dataset))
 
-try:
-    y_val = np.load('data/{}/bin/y_val.npy'.format(args.dataset))
-    X_val_pos = X_val[y_val.ravel() == 1, :]  # Take only positive samples
-except:
-    X_val_pos = X_val
-
-    if args.loss == 'logloss':
-        print('Cannot use logloss as y_val is not found, reverting to rankloss')
-        args.loss = 'rankloss'
-
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
@@ -109,9 +97,7 @@ C = args.negative_samples
 models = {
     'rescal': RESCAL(n_e=n_e, n_r=n_r, k=args.k, lam=lam, gpu=args.use_gpu),
     'distmult': DistMult(n_e=n_e, n_r=n_r, k=args.k, lam=lam, gpu=args.use_gpu),
-    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, lam=lam, gpu=args.use_gpu),
-    'transe': TransE(n_e=n_e, n_r=n_r, k=args.k, gamma=args.transe_gamma, d=args.transe_metric, gpu=args.use_gpu),
-    'ntn': NTN(n_e=n_e, n_r=n_r, k=args.k, lam=lam, slice=args.ntn_slice, gpu=args.use_gpu)
+    'ermlp': ERMLP(n_e=n_e, n_r=n_r, k=args.k, h_dim=args.mlp_h, p=args.mlp_dropout_p, lam=lam, gpu=args.use_gpu)
 }
 
 model = models[args.model]
@@ -189,29 +175,20 @@ for epoch in range(n_epoch):
         # Build batch with negative sampling
         m = X_mb.shape[0]
 
-        if args.loss == 'rankloss':
-            # C x M negative samples
-            X_neg_mb = np.vstack([sample_negatives(X_mb, n_e) for _ in range(C)])
-        else:
-            X_neg_mb = sample_negatives(X_mb, n_e)
+        # C x M negative samples
+        X_neg_mb = np.vstack([sample_negatives(X_mb, n_e) for _ in range(C)])
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
-        if args.loss == 'logloss':
-            X_train_mb, y_true_mb = skshuffle(X_train_mb, y_true_mb)
-
         # Training step
         y = model.forward(X_train_mb)
 
-        if args.loss == 'rankloss':
-            y_pos, y_neg = y[:m], y[m:]
+        y_pos, y_neg = y[:m], y[m:]
 
-            loss = model.ranking_loss(
-                y_pos, y_neg, margin=args.transe_gamma, C=C, average=args.average_loss
-            )
-        elif args.loss == 'logloss':
-            loss = model.log_loss(y, y_true_mb, average=args.average_loss)
+        loss = model.ranking_loss(
+            y_pos, y_neg, margin=args.transe_gamma, C=C, average=args.average_loss
+        )
 
         loss.backward()
         solver.step()
@@ -224,44 +201,20 @@ for epoch in range(n_epoch):
 
         # Training logs
         if args.log_interval != -1 and it % print_every == 0:
-            if args.loss == 'logloss':
-                # Training accuracy
-                pred = model.predict(X_train_mb, sigmoid=True)
-                train_acc = accuracy(pred, y_true_mb)
+            model.eval()
 
-                # Per class training accuracy
-                pos_acc = accuracy(pred[:m], y_true_mb[:m])
-                neg_acc = accuracy(pred[m:], y_true_mb[m:])
+            hits_ks = [1, 3, 10]
 
-                # Validation accuracy
-                y_pred_val = model.forward(X_val)
-                y_prob_val = F.sigmoid(y_pred_val)
+            # Only use 100 samples of X_val
+            mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=500)
 
-                if args.use_gpu:
-                    val_acc = accuracy(y_prob_val.cpu().data.numpy(), y_val)
-                else:
-                    val_acc = accuracy(y_prob_val.data.numpy(), y_val)
+            hits1, hits3, hits10 = hits
 
-                # Validation loss
-                val_loss = model.log_loss(y_pred_val, y_val, args.average_loss)
+            # For TransE, show loss, mrr & hits@10
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                    .format(it, loss.data[0], mr, mrr, hits1, hits3, hits10, end-start))
 
-                print('Iter-{}; loss: {:.4f}; train_acc: {:.4f}; pos: {:.4f}; neg: {:.4f}; val_acc: {:.4f}; val_loss: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], train_acc, pos_acc, neg_acc, val_acc, val_loss.data[0], end-start))
-            else:
-                model.eval()
-
-                hits_ks = [1, 3, 10]
-
-                # Only use 100 samples of X_val
-                mr, mrr, hits = eval_embeddings_vertical(model, X_val, n_e, hits_ks, n_sample=500)
-
-                hits1, hits3, hits10 = hits
-
-                # For TransE, show loss, mrr & hits@10
-                print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
-                      .format(it, loss.data[0], mr, mrr, hits1, hits3, hits10, end-start))
-
-                model.train()
+            model.train()
 
         it += 1
 

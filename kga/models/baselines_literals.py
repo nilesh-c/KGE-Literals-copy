@@ -81,6 +81,7 @@ class MTKGNN_MovieLens(Model):
         self.ermlp = nn.Sequential(
             nn.Linear(3*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1),
         )
 
@@ -88,6 +89,7 @@ class MTKGNN_MovieLens(Model):
         self.usr_mlp = nn.Sequential(
             nn.Linear(2*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1)
         )
 
@@ -95,6 +97,7 @@ class MTKGNN_MovieLens(Model):
         self.mov_mlp = nn.Sequential(
             nn.Linear(2*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1)
         )
 
@@ -231,6 +234,7 @@ class MTKGNN_YAGO(Model):
         self.ermlp = nn.Sequential(
             nn.Linear(3*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1),
         )
 
@@ -238,6 +242,7 @@ class MTKGNN_YAGO(Model):
         self.sa_mlp = nn.Sequential(
             nn.Linear(2*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1)
         )
 
@@ -245,6 +250,7 @@ class MTKGNN_YAGO(Model):
         self.oa_mlp = nn.Sequential(
             nn.Linear(2*k, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1)
         )
 
