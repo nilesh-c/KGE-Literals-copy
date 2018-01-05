@@ -178,7 +178,7 @@ class ERMLP_literal1(Model):
     Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
     """
 
-    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, n_text, dim_text, numeric = True, text=True, gpu=False):
+    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, n_text, dim_text, numeric=True, text=True, gpu=False):
         super(ERMLP_literal1, self).__init__(gpu)
 
         # Hyperparams
@@ -228,7 +228,7 @@ class ERMLP_literal1(Model):
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o, numeric=True, text=True):
+    def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o):
         X = Variable(torch.from_numpy(X)).long()
         X = X.cuda() if self.gpu else X
 
@@ -276,8 +276,73 @@ class ERMLP_literal1(Model):
         else:
             return y_pred.data.numpy()
 
-    def predict_all(self, X):
-        raise NotImplementedError()
+    def predict_all(self, X, **kwargs):
+        # WIP!
+        """
+        Let X be a triple (s, p, o), i.e. tensor of 1x3, return two lists:
+            - list of (s, p, all_others)
+            - list of (all_others, p, o)
+        Pass all of the (full matrix of) literals into kwargs.
+        """
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        s, p, o = X[:, 0], X[:, 1], X[:, 2]
+
+        # Load literals
+        if self.numeric:
+            num_lit_s = Variable(kwargs['numeric_lit_s'])
+            num_lit_s = num_lit_s.cuda() if self.gpu else num_lit_s
+            num_lit_o = Variable(kwargs['numeric_lit_o'])
+            num_lit_o = num_lit_o.cuda() if self.gpu else num_lit_o
+
+        if self.text:
+            txt_lit_s = Variable(kwargs['text_lit_s'])
+            txt_lit_s = txt_lit_s.cuda() if self.gpu else txt_lit_s
+            txt_lit_o = Variable(kwargs['text_lit_o'])
+            txt_lit_o = txt_lit_o.cuda() if self.gpu else txt_lit_o
+
+            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
+            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_ent(s)
+        e_r = self.emb_rel(p)
+        e_o = self.emb_ent(o)
+
+        # Predict o
+        e_s_rep = e_s.repeat(self.n_e, 1)  # n_e x k
+        e_r_rep = e_r.repeat(self.n_e, 1)  # n_e x k
+
+        phi_o = torch.cat([e_s_rep, e_r_rep, self.emb_E.weight], 1)
+
+        if self.numeric:
+            num_lit_s_rep = num_lit_s[s].repeat(self.n_e, 1)
+            phi_o = torch.cat([phi_o, num_lit_s_rep, num_lit_o], 1)
+
+        if self.text:
+            txt_lit_s_rep = weighted_text_s[s].repeat(self.n_e, 1)
+            phi_o = torch.cat([phi_o, txt_lit_s_rep, weighted_text_o], 1)
+
+        y_o = self.ermlp(phi_o).view(-1)
+
+        # Predict s
+        e_o_rep = e_o.repeat(self.n_e, 1)
+
+        phi_s = torch.cat([self.emb_E.weight, e_r_rep, e_o_rep], 1)
+
+        if self.numeric:
+            num_lit_o_rep = num_lit_o[o].repeat(self.n_e, 1)
+            phi_s = torch.cat([phi_s, num_lit_s, num_lit_o_rep], 1)
+
+        if self.text:
+            txt_lit_o_rep = weighted_text_o[o].repeat(self.n_e, 1)
+            phi_s = torch.cat([phi_s, weighted_text_s, txt_lit_o_rep], 1)
+
+        y_s = self.ermlp(phi_s).view(-1)
+
+        return y_s, y_o
 
 
 @inherit_docstrings
@@ -355,7 +420,7 @@ class ERMLP_literal2(Model):
 
         return (h, c)
 
-    def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o, numeric=True, text=True):
+    def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o):
         X = Variable(torch.from_numpy(X)).long()
         X = X.cuda() if self.gpu else X
 
@@ -384,18 +449,15 @@ class ERMLP_literal2(Model):
             text_lit_o = Variable(torch.from_numpy(text_lit_o))
             text_lit_o = text_lit_o.cuda() if self.gpu else text_lit_o
 
-            text_lit_s = text_lit_s.t()
-            text_lit_o = text_lit_o.t()
-
-            embed_lit_s = self.word_embeddings(text_lit_s)
-            embed_lit_o = self.word_embeddings(text_lit_s)
+            embed_lit_s = self.word_embeddings(text_lit_s.t())
+            embed_lit_o = self.word_embeddings(text_lit_o.t())
 
             x_s = embed_lit_s.view(self.text_length, self.batch_size, -1)
             lstm_s_out, self.hidden = self.lstm_s(x_s, self.hidden)
             lstm_s_out = lstm_s_out[-1]
 
             x_p = embed_lit_o.view(self.text_length, self.batch_size, -1)
-            lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
+            lstm_o_out, self.hidden = self.lstm_o(x_p, self.hidden)
             lstm_o_out = lstm_o_out[-1]
 
             phi = torch.cat([phi, lstm_s_out, lstm_o_out], 1)
@@ -412,8 +474,81 @@ class ERMLP_literal2(Model):
         else:
             return y_pred.data.numpy()
 
-    def predict_all(self, X):
-        raise NotImplementedError()
+    def predict_all(self, X, **kwargs):
+        # WIP!
+        """
+        Let X be a triple (s, p, o), i.e. tensor of 1x3, return two lists:
+            - list of (s, p, all_others)
+            - list of (all_others, p, o)
+        Pass all of the (full matrix of) literals into kwargs.
+        """
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        s, p, o = X[:, 0], X[:, 1], X[:, 2]
+
+        # Load literals
+        if self.numeric:
+            num_lit_s = Variable(kwargs['numeric_lit_s'])
+            num_lit_s = num_lit_s.cuda() if self.gpu else num_lit_s
+            num_lit_o = Variable(kwargs['numeric_lit_o'])
+            num_lit_o = num_lit_o.cuda() if self.gpu else num_lit_o
+
+        if self.text:
+            txt_lit_s = Variable(kwargs['text_lit_s'])
+            txt_lit_s = txt_lit_s.cuda() if self.gpu else txt_lit_s
+            txt_lit_o = Variable(kwargs['text_lit_o'])
+            txt_lit_o = txt_lit_o.cuda() if self.gpu else txt_lit_o
+
+            embed_lit_s = self.word_embeddings(txt_lit_s.t())
+            embed_lit_o = self.word_embeddings(txt_lit_o.t())
+
+            x_s = embed_lit_s.view(self.text_length, len(txt_lit_s), -1)
+            lstm_s_out, self.hidden = self.lstm_s(x_s, self.hidden)
+            lstm_s_out = lstm_s_out[-1]
+
+            x_p = embed_lit_o.view(self.text_length, len(txt_lit_o), -1)
+            lstm_o_out, self.hidden = self.lstm_o(x_p, self.hidden)
+            lstm_o_out = lstm_o_out[-1]
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_ent(s)
+        e_r = self.emb_rel(p)
+        e_o = self.emb_ent(o)
+
+        # Predict o
+        e_s_rep = e_s.repeat(self.n_e, 1)  # n_e x k
+        e_r_rep = e_r.repeat(self.n_e, 1)  # n_e x k
+
+        phi_o = torch.cat([e_s_rep, e_r_rep, self.emb_E.weight], 1)
+
+        if self.numeric:
+            num_lit_s_rep = num_lit_s[s].repeat(self.n_e, 1)
+            phi_o = torch.cat([phi_o, num_lit_s_rep, num_lit_o], 1)
+
+        if self.text:
+            txt_lit_s_rep = lstm_s_out[s].repeat(self.n_e, 1)
+            phi_o = torch.cat([phi_o, txt_lit_s_rep, lstm_o_out], 1)
+
+        y_o = self.ermlp(phi_o).view(-1)
+
+        # Predict s
+        e_o_rep = e_o.repeat(self.n_e, 1)
+
+        phi_s = torch.cat([self.emb_E.weight, e_r_rep, e_o_rep], 1)
+
+        if self.numeric:
+            num_lit_o_rep = num_lit_o[o].repeat(self.n_e, 1)
+            phi_s = torch.cat([phi_s, num_lit_s, num_lit_o_rep], 1)
+
+        if self.text:
+            txt_lit_o_rep = lstm_o_out[o].repeat(self.n_e, 1)
+            phi_s = torch.cat([phi_s, lstm_s_out, txt_lit_o_rep], 1)
+
+        y_s = self.ermlp(phi_s).view(-1)
+
+        return y_s, y_o
 
 
 @inherit_docstrings
