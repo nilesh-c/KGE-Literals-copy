@@ -11,6 +11,7 @@ from kga.util import inherit_docstrings
 from kga.models.base import Model
 import pdb
 
+
 @inherit_docstrings
 class ERLMLP_MovieLens(Model):
     """
@@ -119,6 +120,56 @@ class ERLMLP_MovieLens(Model):
         else:
             return y_pred.data.numpy()
 
+
+@inherit_docstrings
+class DistMult_MovieLens(Model):
+    """
+    DistMult: diagonal bilinear model, without subject and object constraint
+    ------------------------------------------------------------------------
+    Yang, Bishan, et al. "Learning multi-relational semantics using
+    neural-embedding models." arXiv:1411.4072 (2014).
+    """
+
+    def __init__(self, n_s, n_r, n_o, k, lam, gpu=False):
+        super(DistMult_MovieLens, self).__init__(gpu)
+
+        # Hyperparams
+        self.n_s = n_s
+        self.n_r = n_r
+        self.n_o = n_o
+        self.k = k
+        self.lam = lam
+
+        # Nets
+        self.emb_S = nn.Embedding(self.n_s, self.k)
+        self.emb_R = nn.Embedding(self.n_r, self.k)
+        self.emb_O = nn.Embedding(self.n_o, self.k)
+
+        self.embeddings = [self.emb_S, self.emb_R, self.emb_O]
+        self.initialize_embeddings()
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
+    def forward(self, X):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        s, r, o = X[:, 0], X[:, 1], X[:, 2]
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_S(s)
+        e_o = self.emb_O(o)
+        W = self.emb_R(r)
+
+        # Forward
+        f = torch.sum(e_s * W * e_o, 1)
+
+        return f.view(-1, 1)
+
+
 @inherit_docstrings
 class ERMLP_literal1(Model):
     """
@@ -184,37 +235,34 @@ class ERMLP_literal1(Model):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        if self.numeric:
-            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
-            numeric_lit_s = numeric_lit_s.cuda() if self.gpu else numeric_lit_s
-            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
-            numeric_lit_o = numeric_lit_o.cuda() if self.gpu else numeric_lit_o
-        if self.text:
-            text_lit_s = Variable(torch.from_numpy(text_lit_s))
-            text_lit_s = text_lit_s.cuda() if self.gpu else text_lit_s
-            text_lit_o = Variable(torch.from_numpy(text_lit_o))
-            text_lit_o = text_lit_o.cuda() if self.gpu else text_lit_o
-
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
         e_ls = self.emb_R(ls)
 
         # Forward
-        if self.numeric and not self.text:
-            phi = torch.cat([e_hs, numeric_lit_s, e_ts, numeric_lit_o, e_ls], 1)  # M x (3k + numeric)
-        elif self.text and not self.numeric:
+        phi = torch.cat([e_hs, e_ts, e_ls])
+
+        if self.numeric:
+            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
+            numeric_lit_s = numeric_lit_s.cuda() if self.gpu else numeric_lit_s
+
+            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
+            numeric_lit_o = numeric_lit_o.cuda() if self.gpu else numeric_lit_o
+
+            phi = torch.cat([phi, numeric_lit_s, numeric_lit_o], 1)
+
+        if self.text:
+            text_lit_s = Variable(torch.from_numpy(text_lit_s))
+            text_lit_s = text_lit_s.cuda() if self.gpu else text_lit_s
+
+            text_lit_o = Variable(torch.from_numpy(text_lit_o))
+            text_lit_o = text_lit_o.cuda() if self.gpu else text_lit_o
+
             weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
             weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
 
-            phi = torch.cat([e_hs, weighted_text_s, e_ts, weighted_text_o, e_ls], 1)  # M x (3k + text)
-        elif self.numeric and self.text:
-            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
-            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
-
-            phi = torch.cat([e_hs, weighted_text_s, numeric_lit_s, e_ts, weighted_text_o, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
-        else:
-            phi = torch.cat([e_hs, e_ts, e_ls])
+            phi = torch.cat([phi, weighted_text_s, weighted_text_o], 1)
 
         y = self.mlp(phi)
 
@@ -314,6 +362,22 @@ class ERMLP_literal2(Model):
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
+        # Project to embedding, each is M x k
+        e_hs = self.emb_E(hs)
+        e_ts = self.emb_E(ts)
+        e_ls = self.emb_R(ls)
+
+        phi = torch.cat([e_hs, e_ts, e_ls], 1)
+
+        if self.numeric:
+            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
+            numeric_lit_s = numeric_lit_s.cuda() if self.gpu else numeric_lit_s
+
+            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
+            numeric_lit_o = numeric_lit_o.cuda() if self.gpu else numeric_lit_o
+
+            phi = torch.cat([phi, numeric_lit_s, numeric_lit_o], 1)
+
         if self.text:
             text_lit_s = Variable(torch.from_numpy(text_lit_s))
             text_lit_s = text_lit_s.cuda() if self.gpu else text_lit_s
@@ -333,26 +397,8 @@ class ERMLP_literal2(Model):
             x_p = embed_lit_o.view(self.text_length, self.batch_size, -1)
             lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
             lstm_o_out = lstm_o_out[-1]
-        if self.numeric:
-            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
-            numeric_lit_s = numeric_lit_s.cuda() if self.gpu else numeric_lit_s
-            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
-            numeric_lit_o = numeric_lit_o.cuda() if self.gpu else numeric_lit_o
 
-        # Project to embedding, each is M x k
-        e_hs = self.emb_E(hs)
-        e_ts = self.emb_E(ts)
-        e_ls = self.emb_R(ls)
-
-        # Forward
-        if self.numeric and not self.text:
-            phi = torch.cat([e_hs, numeric_lit_s, e_ts, numeric_lit_o, e_ls], 1)  # M x (3k + numeric)
-        elif self.text and not self.numeric:
-            phi = torch.cat([e_hs, lstm_s_out, e_ts, lstm_o_out, e_ls], 1)  # M x (3k + text)
-        elif self.numeric and self.text:
-            phi = torch.cat([e_hs, lstm_s_out, numeric_lit_s, e_ts, lstm_o_out, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
-        else:
-            phi = torch.cat([e_hs, e_ts, e_ls], 1)
+            phi = torch.cat([phi, lstm_s_out, lstm_o_out], 1)
 
         y = self.mlp(phi)
 
@@ -555,52 +601,3 @@ class DistMult_literal(Model):
 
     def predict_all(self, X):
         raise NotImplementedError()
-
-
-@inherit_docstrings
-class DistMultDecoupled(Model):
-    """
-    DistMult: diagonal bilinear model, without subject and object constraint
-    ------------------------------------------------------------------------
-    Yang, Bishan, et al. "Learning multi-relational semantics using
-    neural-embedding models." arXiv:1411.4072 (2014).
-    """
-
-    def __init__(self, n_s, n_r, n_o, k, lam, gpu=False):
-        super(DistMultDecoupled, self).__init__(gpu)
-
-        # Hyperparams
-        self.n_s = n_s
-        self.n_r = n_r
-        self.n_o = n_o
-        self.k = k
-        self.lam = lam
-
-        # Nets
-        self.emb_S = nn.Embedding(self.n_s, self.k)
-        self.emb_R = nn.Embedding(self.n_r, self.k)
-        self.emb_O = nn.Embedding(self.n_o, self.k)
-
-        self.embeddings = [self.emb_S, self.emb_R, self.emb_O]
-        self.initialize_embeddings()
-
-        # Copy all params to GPU if specified
-        if self.gpu:
-            self.cuda()
-
-    def forward(self, X):
-        X = Variable(torch.from_numpy(X)).long()
-        X = X.cuda() if self.gpu else X
-
-        # Decompose X into head, relationship, tail
-        s, r, o = X[:, 0], X[:, 1], X[:, 2]
-
-        # Project to embedding, each is M x k
-        e_s = self.emb_S(s)
-        e_o = self.emb_O(o)
-        W = self.emb_R(r)
-
-        # Forward
-        f = torch.sum(e_s * W * e_o, 1)
-
-        return f.view(-1, 1)

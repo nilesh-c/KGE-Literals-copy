@@ -86,7 +86,7 @@ lam = args.embeddings_lambda
 C = args.negative_samples
 
 # Initialize model
-model = DistMultDecoupled(n_u, n_r, n_m, k, lam, gpu=args.use_gpu)
+model = DistMult_MovieLens(n_u, n_r, n_m, k, lam, gpu=args.use_gpu)
 
 # Training params
 lr = args.lr
