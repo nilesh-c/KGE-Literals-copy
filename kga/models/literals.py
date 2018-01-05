@@ -206,10 +206,12 @@ class ERMLP_literal1(Model):
         elif self.text and not self.numeric:
             weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
             weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
+
             phi = torch.cat([e_hs, weighted_text_s, e_ts, weighted_text_o, e_ls], 1)  # M x (3k + text)
         elif self.numeric and self.text:
             weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
             weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
+
             phi = torch.cat([e_hs, weighted_text_s, numeric_lit_s, e_ts, weighted_text_o, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
         else:
             phi = torch.cat([e_hs, e_ts, e_ls])
@@ -238,7 +240,7 @@ class ERMLP_literal2(Model):
     Dong, Xin, et al. "Knowledge vault: A web-scale approach to probabilistic knowledge fusion." KDD, 2014.
     """
 
-    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, vocab_size, dim_text, pretrained_embeddings, batch_size, text_length, numeric = True, text=True, gpu=False):
+    def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, vocab_size, dim_text, pretrained_embeddings, batch_size, text_length, numeric=True, text=True, gpu=False):
         super(ERMLP_literal2, self).__init__(gpu)
 
         # Hyperparams
@@ -269,8 +271,10 @@ class ERMLP_literal2(Model):
             n_input += 2*self.k
             self.word_embeddings = nn.Embedding(self.vocab_size, self.dim_text)
             self.word_embeddings.weight.data.copy_(torch.from_numpy(pretrained_embeddings))
+
             self.lstm_s = nn.LSTM(self.dim_text, self.k)
             self.lstm_o = nn.LSTM(self.dim_text, self.k)
+
             self.hidden = self.init_hidden()
 
         self.mlp = nn.Sequential(
@@ -312,7 +316,9 @@ class ERMLP_literal2(Model):
 
         if self.text:
             text_lit_s = Variable(torch.from_numpy(text_lit_s))
+            text_lit_s = text_lit_s.cuda() if self.gpu else text_lit_s
             text_lit_o = Variable(torch.from_numpy(text_lit_o))
+            text_lit_o = text_lit_o.cuda() if self.gpu else text_lit_o
 
             text_lit_s = text_lit_s.t()
             text_lit_o = text_lit_o.t()
@@ -328,8 +334,10 @@ class ERMLP_literal2(Model):
             lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
             lstm_o_out = lstm_o_out[-1]
         if self.numeric:
-            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s),requires_grad=False)
-            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o),requires_grad=False)
+            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
+            numeric_lit_s = numeric_lit_s.cuda() if self.gpu else numeric_lit_s
+            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
+            numeric_lit_o = numeric_lit_o.cuda() if self.gpu else numeric_lit_o
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -344,12 +352,15 @@ class ERMLP_literal2(Model):
         elif self.numeric and self.text:
             phi = torch.cat([e_hs, lstm_s_out, numeric_lit_s, e_ts, lstm_o_out, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
         else:
-            phi = torch.cat([e_hs, e_ts, e_ls],1)
+            phi = torch.cat([e_hs, e_ts, e_ls], 1)
+
         y = self.mlp(phi)
+
         return y.view(-1, 1)
 
     def predict(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o):
         y_pred = self.forward(X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o).view(-1, 1)
+
         if self.gpu:
             return y_pred.cpu().data.numpy()
         else:
