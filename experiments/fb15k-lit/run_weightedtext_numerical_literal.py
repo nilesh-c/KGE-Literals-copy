@@ -12,7 +12,6 @@ from sklearn.utils import shuffle as skshuffle
 import pdb
 from scipy.sparse import load_npz
 import argparse
-from visualize import make_dot
 
 
 parser = argparse.ArgumentParser(
@@ -48,7 +47,7 @@ parser.add_argument('--checkpoint_dir', default='models/', metavar='',
 parser.add_argument('--use_gpu', default=False, action='store_true',
                     help='whether to run in the GPU')
 parser.add_argument('--randseed', default=9999, type=int, metavar='',
-                    help='resume the training from latest checkpoint (default: False')
+                    help='random seed for the experiment')
 
 args = parser.parse_args()
 
@@ -64,7 +63,6 @@ lr_decay_every = args.lr_decay_every
 weight_decay = args.weight_decay
 h_dim = args.h_dim
 embeddings_lambda = args.embeddings_lambda
-normalize_embed = args.normalize_embed
 print_every = args.log_interval
 checkpoint_dir = args.checkpoint_dir
 use_gpu = args.use_gpu
@@ -160,7 +158,10 @@ M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
 # Initialize model
-model = ERMLP_literal1(n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric, n_text, dim_text, numeric = True, text=True, gpu=True)
+model = ERMLP_literal1(
+    n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric, n_text,
+    dim_text, numeric=True, text=True, gpu=True
+)
 
 # Training params
 solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -198,11 +199,11 @@ for epoch in range(n_epoch):
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
-        train_literal_s_mb = train_literal_s[X_train_mb[:,0]]
-        train_literal_o_mb = train_literal_o[X_train_mb[:,2]]
+        train_literal_s_mb = train_literal_s[X_train_mb[:, 0]]
+        train_literal_o_mb = train_literal_o[X_train_mb[:, 2]]
 
-        train_text_s_mb = idx2array(textliteral_reprsn, train_text_s[X_train_mb[:,0]])
-        train_text_o_mb = idx2array(textliteral_reprsn, train_text_o[X_train_mb[:,2]])
+        train_text_s_mb = idx2array(textliteral_reprsn, train_text_s[X_train_mb[:, 0]])
+        train_text_o_mb = idx2array(textliteral_reprsn, train_text_o[X_train_mb[:, 2]])
 
         # Training step
         y = model.forward(X_train_mb, train_literal_s_mb, train_literal_o_mb, train_text_s_mb, train_text_o_mb)
