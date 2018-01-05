@@ -19,33 +19,6 @@ class ERLMLP_MovieLens(Model):
     """
 
     def __init__(self, n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, gpu=False, usr_lit=False, mov_lit=False, img_lit=False, txt_lit=False):
-        """
-        ERL-MLP: Entity-Relation-Literal MLP for MovieLens
-        --------------------------------------------------
-
-        Params:
-        -------
-            n_e: int
-                Number of entities in dataset.
-
-            n_r: int
-                Number of relationships in dataset.
-
-            n_a: int
-                Number of attributes/literals in dataset.
-
-            k: int
-                Embedding size for entity and relationship.
-
-            l: int
-                Size of projected attributes/literals.
-
-            h_dim: int
-                Size of hidden layer.
-
-            gpu: bool, default: False
-                Whether to use GPU or not.
-        """
         super(ERLMLP_MovieLens, self).__init__(gpu)
 
         # Hyperparams
@@ -95,46 +68,25 @@ class ERLMLP_MovieLens(Model):
             self.cuda()
 
     def forward(self, X, X_lit_usr, X_lit_mov, X_lit_img=None, X_lit_txt=None):
-        """
-        Given a (mini)batch of triplets X of size M, predict the validity.
-
-        Params:
-        -------
-        X: int matrix of M x 3, where M is the (mini)batch size
-            First column contains index of head entities.
-            Second column contains index of relationships.
-            Third column contains index of tail entities.
-
-        X_lit: float matrix of M x n_a
-            Contains all literals/attributes information of all data in batch.
-            i-th row correspond to the i-th data in X.
-
-        Returns:
-        --------
-        y: Mx1 vectors
-            Contains the probs result of each M data.
-        """
         M = X.shape[0]
+
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
 
         # Decompose X into head, relationship, tail
         s, r, o = X[:, 0], X[:, 1], X[:, 2]
 
+        # Load literals
+        X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
+        X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
+        X_lit_img = Variable(torch.from_numpy(X_lit_img))
+        X_lit_txt = Variable(torch.from_numpy(X_lit_txt))
+
         if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            r = Variable(torch.from_numpy(r).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-            X_lit_usr = Variable(torch.from_numpy(X_lit_usr).cuda())
-            X_lit_mov = Variable(torch.from_numpy(X_lit_mov).cuda())
-            X_lit_img = Variable(torch.from_numpy(X_lit_img).cuda())
-            X_lit_txt = Variable(torch.from_numpy(X_lit_txt).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            r = Variable(torch.from_numpy(r))
-            o = Variable(torch.from_numpy(o))
-            X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
-            X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
-            X_lit_img = Variable(torch.from_numpy(X_lit_img))
-            X_lit_txt = Variable(torch.from_numpy(X_lit_txt))
+            X_lit_usr = X_lit_usr.cuda()
+            X_lit_mov = X_lit_mov.cuda()
+            X_lit_img = X_lit_img.cuda()
+            X_lit_txt = X_lit_txt.cuda()
 
         # Project to embedding, each is M x k
         e_usr = self.emb_usr(s)
@@ -176,35 +128,6 @@ class ERMLP_literal1(Model):
     """
 
     def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, n_text, dim_text, numeric = True, text=True, gpu=False):
-        """
-        ER-MLP: Entity-Relation MLP
-        ---------------------------
-
-        Params:
-        -------
-            n_e: int
-                Number of entities in dataset.
-
-            n_r: int
-                Number of relationships in dataset.
-
-            k: int
-                Embedding size.
-
-            h_dim: int
-                Size of hidden layer.
-
-            p: float
-                Dropout rate.
-
-            lam: float
-                Prior strength of the embeddings. Used to constaint the
-                embedding norms inside a (euclidean) unit ball. The prior is
-                Gaussian, this param is the precision.
-
-            gpu: bool, default: False
-                Whether to use GPU or not.
-        """
         super(ERMLP_literal1, self).__init__(gpu)
 
         # Hyperparams
@@ -219,11 +142,14 @@ class ERMLP_literal1(Model):
         self.dim_text = dim_text
         self.numeric = numeric
         self.text = text
+
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_R = nn.Embedding(self.n_r, self.k)
+
         # Determine MLP input size
         n_input = 3*k
+
         if numeric:
             n_input += 2*n_numeric
         if text:
@@ -240,6 +166,7 @@ class ERMLP_literal1(Model):
 
         self.embeddings = [self.emb_E, self.emb_R]
         self.initialize_embeddings()
+
         # Xavier init
         for p in self.mlp.modules():
             if isinstance(p, nn.Linear):
@@ -251,29 +178,22 @@ class ERMLP_literal1(Model):
             self.cuda()
 
     def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o, numeric=True, text=True):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-            if self.numeric:
-                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s).cuda(),requires_grad=False)
-                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o).cuda(),requires_grad=False)
-            if self.text:
-                text_lit_s = Variable(torch.from_numpy(text_lit_s).cuda(),requires_grad=False)
-                text_lit_o = Variable(torch.from_numpy(text_lit_o).cuda(),requires_grad=False)
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
-            if self.numeric:
-                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s),requires_grad=False)
-                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o),requires_grad=False)
-            if self.text:
-                text_lit_s = Variable(torch.from_numpy(text_lit_s),requires_grad=False)
-                text_lit_o = Variable(torch.from_numpy(text_lit_o),requires_grad=False)
+        if self.numeric:
+            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
+            numeric_lit_s = numeric_lit_s.cuda() if self.gpu else numeric_lit_s
+            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o))
+            numeric_lit_o = numeric_lit_o.cuda() if self.gpu else numeric_lit_o
+        if self.text:
+            text_lit_s = Variable(torch.from_numpy(text_lit_s))
+            text_lit_s = text_lit_s.cuda() if self.gpu else text_lit_s
+            text_lit_o = Variable(torch.from_numpy(text_lit_o))
+            text_lit_o = text_lit_o.cuda() if self.gpu else text_lit_o
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -284,25 +204,31 @@ class ERMLP_literal1(Model):
         if self.numeric and not self.text:
             phi = torch.cat([e_hs, numeric_lit_s, e_ts, numeric_lit_o, e_ls], 1)  # M x (3k + numeric)
         elif self.text and not self.numeric:
-            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X),1,1),text_lit_s).view(len(X),self.dim_text)
-            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X),1,1),text_lit_o).view(len(X),self.dim_text)
+            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
+            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
             phi = torch.cat([e_hs, weighted_text_s, e_ts, weighted_text_o, e_ls], 1)  # M x (3k + text)
         elif self.numeric and self.text:
-            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X),1,1),text_lit_s).view(len(X),self.dim_text)
-            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X),1,1),text_lit_o).view(len(X),self.dim_text)
+            weighted_text_s = torch.bmm(self.attn_weights_s.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_s).view(len(X), self.dim_text)
+            weighted_text_o = torch.bmm(self.attn_weights_o.t().unsqueeze(0).repeat(len(X), 1, 1), text_lit_o).view(len(X), self.dim_text)
             phi = torch.cat([e_hs, weighted_text_s, numeric_lit_s, e_ts, weighted_text_o, numeric_lit_o, e_ls], 1)  # M x (3k + text+numeric)
         else:
             phi = torch.cat([e_hs, e_ts, e_ls])
+
         y = self.mlp(phi)
 
         return y.view(-1, 1)
 
     def predict(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o):
         y_pred = self.forward(X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o).view(-1, 1)
+
         if self.gpu:
             return y_pred.cpu().data.numpy()
         else:
             return y_pred.data.numpy()
+
+    def predict_all(self, X):
+        raise NotImplementedError()
+
 
 @inherit_docstrings
 class ERMLP_literal2(Model):
@@ -313,35 +239,6 @@ class ERMLP_literal2(Model):
     """
 
     def __init__(self, n_e, n_r, k, h_dim, p, lam, n_numeric, vocab_size, dim_text, pretrained_embeddings, batch_size, text_length, numeric = True, text=True, gpu=False):
-        """
-        ER-MLP: Entity-Relation MLP
-        ---------------------------
-
-        Params:
-        -------
-            n_e: int
-                Number of entities in dataset.
-
-            n_r: int
-                Number of relationships in dataset.
-
-            k: int
-                Embedding size.
-
-            h_dim: int
-                Size of hidden layer.
-
-            p: float
-                Dropout rate.
-
-            lam: float
-                Prior strength of the embeddings. Used to constaint the
-                embedding norms inside a (euclidean) unit ball. The prior is
-                Gaussian, this param is the precision.
-
-            gpu: bool, default: False
-                Whether to use GPU or not.
-        """
         super(ERMLP_literal2, self).__init__(gpu)
 
         # Hyperparams
@@ -358,12 +255,14 @@ class ERMLP_literal2(Model):
         self.text = text
         self.batch_size = batch_size
         self.text_length = text_length
+
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_R = nn.Embedding(self.n_r, self.k)
 
         # Determine MLP input size
         n_input = 3*k
+
         if numeric:
             n_input += 2*n_numeric
         if text:
@@ -373,7 +272,7 @@ class ERMLP_literal2(Model):
             self.lstm_s = nn.LSTM(self.dim_text, self.k)
             self.lstm_o = nn.LSTM(self.dim_text, self.k)
             self.hidden = self.init_hidden()
-        
+
         self.mlp = nn.Sequential(
             nn.Linear(n_input, h_dim),
             nn.ReLU(),
@@ -383,6 +282,7 @@ class ERMLP_literal2(Model):
 
         self.embeddings = [self.emb_E, self.emb_R]
         self.initialize_embeddings()
+
         # Xavier init
         for p in self.mlp.modules():
             if isinstance(p, nn.Linear):
@@ -396,47 +296,40 @@ class ERMLP_literal2(Model):
     def init_hidden(self):
         # the first is the hidden h
         # the second is the cell  c
-        if self.gpu:
-            return (Variable(torch.zeros(1, self.batch_size, self.k).cuda()),
-                Variable(torch.zeros(1, self.batch_size, self.k).cuda()))
-        else:
-            return (Variable(torch.zeros(1, self.batch_size, self.k)),
-                Variable(torch.zeros(1, self.batch_size, self.k)))
+        h = Variable(torch.zeros(1, self.batch_size, self.k))
+        h = h.cuda() if self.gpu else h
+        c = Variable(torch.zeros(1, self.batch_size, self.k))
+        c = c.cuda() if self.gpu else c
+
+        return (h, c)
 
     def forward(self, X, numeric_lit_s, numeric_lit_o, text_lit_s, text_lit_o, numeric=True, text=True):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-            if self.text:
-                text_lit_s = Variable(torch.from_numpy(text_lit_s).cuda())
-                text_lit_o = Variable(torch.from_numpy(text_lit_o).cuda())
-            if self.numeric:
-                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s).cuda(),requires_grad=False)
-                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o).cuda(),requires_grad=False)
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
-            if self.text:
-                text_lit_s = Variable(torch.from_numpy(text_lit_s))
-                text_lit_o = Variable(torch.from_numpy(text_lit_o))                        
-            if self.numeric:
-                numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s),requires_grad=False)
-                numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o),requires_grad=False)
+
         if self.text:
+            text_lit_s = Variable(torch.from_numpy(text_lit_s))
+            text_lit_o = Variable(torch.from_numpy(text_lit_o))
+
             text_lit_s = text_lit_s.t()
             text_lit_o = text_lit_o.t()
+
             embed_lit_s = self.word_embeddings(text_lit_s)
             embed_lit_o = self.word_embeddings(text_lit_s)
+
             x_s = embed_lit_s.view(self.text_length, self.batch_size, -1)
             lstm_s_out, self.hidden = self.lstm_s(x_s, self.hidden)
             lstm_s_out = lstm_s_out[-1]
+
             x_p = embed_lit_o.view(self.text_length, self.batch_size, -1)
             lstm_o_out, self.hidden = self.lstm_s(x_p, self.hidden)
             lstm_o_out = lstm_o_out[-1]
+        if self.numeric:
+            numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s),requires_grad=False)
+            numeric_lit_o = Variable(torch.from_numpy(numeric_lit_o),requires_grad=False)
 
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
@@ -462,6 +355,9 @@ class ERMLP_literal2(Model):
         else:
             return y_pred.data.numpy()
 
+    def predict_all(self, X):
+        raise NotImplementedError()
+
 
 @inherit_docstrings
 class RESCAL_literal(Model):
@@ -474,29 +370,6 @@ class RESCAL_literal(Model):
     """
 
     def __init__(self, n_e, n_r, k, lam, n_l=None, n_text=None , gpu=False):
-        """
-        RESCAL: bilinear model
-        ----------------------
-
-        Params:
-        -------
-            n_e: int
-                Number of entities in dataset.
-
-            n_r: int
-                Number of relationships in dataset.
-
-            k: int
-                Embedding size.
-
-            lam: float
-                Prior strength of the embeddings. Used to constaint the
-                embedding norms inside a (euclidean) unit ball. The prior is
-                Gaussian, this param is the precision.
-
-            gpu: bool, default: False
-                Whether to use GPU or not.
-        """
         super(RESCAL_literal, self).__init__(gpu)
 
         # Hyperparams
@@ -506,7 +379,8 @@ class RESCAL_literal(Model):
         self.lam = lam
         self.n_l = n_l
         self.n_text = n_text
-        if self.n_text != None:
+
+        if self.n_text is not None:
             self.reprs_text_subject = nn.Linear(self.n_text, self.k)
             self.reprs_text_object = nn.Linear(self.n_text, self.k)
 
@@ -526,43 +400,40 @@ class RESCAL_literal(Model):
             self.cuda()
 
     def forward(self, X, s_lit=None, o_lit=None, text_s=None, text_o=None):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
 
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-            if self.n_l != None:
-                s_lit = Variable(torch.from_numpy(s_lit).cuda())
-                o_lit = Variable(torch.from_numpy(o_lit).cuda())
-            if self.n_text != None:
-                text_s = Variable(torch.from_numpy(text_s).cuda())
-                text_o = Variable(torch.from_numpy(text_o).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
-            if self.n_l != None:
-                s_lit = Variable(torch.from_numpy(s_lit))
-                o_lit = Variable(torch.from_numpy(o_lit))
-            if self.n_text != None:
-                text_s = Variable(torch.from_numpy(text_s))
-                text_o = Variable(torch.from_numpy(text_o))
+        if self.n_l is not None:
+            s_lit = Variable(torch.from_numpy(s_lit))
+            s_lit = s_lit.cuda() if self.gpu else s_lit
+            o_lit = Variable(torch.from_numpy(o_lit))
+            o_lit = o_lit.cuda() if self.gpu else o_lit
+        if self.n_text is not None:
+            text_s = Variable(torch.from_numpy(text_s))
+            text_s = text_s.cuda() if self.gpu else text_s
+            text_o = Variable(torch.from_numpy(text_o))
+            text_o = text_o.cuda() if self.gpu else text_o
+
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
-        if self.n_l != None:
+
+        if self.n_l is not None:
             e1_rep = torch.cat([e_hs, s_lit], 1)  # M x (k + n_l)
-            e2_rep = torch.cat([e_ts, o_lit], 1)  # M x (k + n_l)            
+            e2_rep = torch.cat([e_ts, o_lit], 1)  # M x (k + n_l)
+
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
-
-        elif self.n_text != None:
+        elif self.n_text is not None:
             text_s_rep = self.reprs_subject(text_s)
             text_o_rep = self.reprs_object(text_o)
+
             e1_rep = torch.cat([e_hs, s_lit, text_s_rep], 1)  # M x 3k
             e2_rep = torch.cat([e_ts, o_lit, text_o_rep], 1)  # M x 3k
+
             e1_rep = self.mlp(e1_rep).view(-1, self.k, 1)   # M x k x 1
             e2_rep = self.mlp(e2_rep).view(-1, self.k, 1)   # M x k x 1
         else:
@@ -570,6 +441,7 @@ class RESCAL_literal(Model):
             e2_rep = e_ts.view(-1, self.k, 1)
 
         W = self.emb_R(ls).view(-1, self.k, self.k)  # M x k x k
+
         # Forward
         out = torch.bmm(torch.transpose(e1_rep, 1, 2), W)  # h^T W
         out = torch.bmm(out, e2_rep)  # (h^T W) h
@@ -578,25 +450,8 @@ class RESCAL_literal(Model):
         return out
 
     def predict(self, X, s_lit=None, o_lit=None, text_s=None, text_o=None, sigmoid=True):
-        """
-        Predict the score of test batch.
-
-        Params:
-        -------
-        X: int matrix of M x 3, where M is the (mini)batch size
-            First row contains index of head entities.
-            Second row contains index of relationships.
-            Third row contains index of tail entities.
-
-        sigmoid: bool, default: False
-            Whether to apply sigmoid at the prediction or not. Useful if the
-            predicted result is scores/logits.
-
-        Returns:
-        --------
-        y_pred: np.array of Mx1
-        """
         y_pred = self.forward(X, s_lit, o_lit, text_s, text_o).view(-1, 1)
+
         if sigmoid:
             y_pred = F.sigmoid(y_pred)
 
@@ -604,6 +459,9 @@ class RESCAL_literal(Model):
             return y_pred.cpu().data.numpy()
         else:
             return y_pred.data.numpy()
+
+    def predict_all(self, X):
+        raise NotImplementedError()
 
 
 @inherit_docstrings
@@ -616,32 +474,6 @@ class DistMult_literal(Model):
     """
 
     def __init__(self, n_e, n_r, n_l, k, lam, gpu=False):
-        """
-        DistMult: diagonal bilinear model
-        ---------------------------------
-
-        Params:
-        -------
-            n_e: int
-                Number of entities in dataset.
-
-            n_r: int
-                Number of relationships in dataset.
-
-            n_l: int
-                Number of literal relations in dataset.
-
-            k: int
-                Embedding size.
-
-            lam: float
-                Prior strength of the embeddings. Used to constaint the
-                embedding norms inside a (euclidean) unit ball. The prior is
-                Gaussian, this param is the precision.
-
-            gpu: bool, default: False
-                Whether to use GPU or not.
-        """
         super(DistMult_literal, self).__init__(gpu)
 
         # Hyperparams
@@ -669,20 +501,17 @@ class DistMult_literal(Model):
             self.cuda()
 
     def forward(self, X, s_lit, o_lit):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
-        if self.gpu:
-            hs = Variable(torch.from_numpy(hs).cuda())
-            ls = Variable(torch.from_numpy(ls).cuda())
-            ts = Variable(torch.from_numpy(ts).cuda())
-            s_lit = Variable(torch.from_numpy(s_lit).cuda())
-            o_lit = Variable(torch.from_numpy(o_lit).cuda())
-        else:
-            hs = Variable(torch.from_numpy(hs))
-            ls = Variable(torch.from_numpy(ls))
-            ts = Variable(torch.from_numpy(ts))
-            s_lit = Variable(torch.from_numpy(s_lit))
-            o_lit = Variable(torch.from_numpy(o_lit))
+
+        s_lit = Variable(torch.from_numpy(s_lit))
+        s_lit = s_lit.cuda() if self.gpu else s_lit
+        o_lit = Variable(torch.from_numpy(o_lit))
+        o_lit = o_lit.cuda() if self.gpu else o_lit
+
         # Project to embedding, each is M x k
         e_hs = self.emb_E(hs)
         e_ts = self.emb_E(ts)
@@ -696,30 +525,13 @@ class DistMult_literal(Model):
         e1_rep = self.mlp(e1_rep)   # M x k
         e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k
         e2_rep = self.mlp(e2_rep)   # M x k
+
         # Forward
         f = torch.sum(e1_rep * W * e2_rep, 1)
 
         return f.view(-1, 1)
 
     def predict(self, X, s_lit, o_lit, sigmoid=False):
-        """
-        Predict the score of test batch.
-
-        Params:
-        -------
-        X: int matrix of M x 3, where M is the (mini)batch size
-            First row contains index of head entities.
-            Second row contains index of relationships.
-            Third row contains index of tail entities.
-
-        sigmoid: bool, default: False
-            Whether to apply sigmoid at the prediction or not. Useful if the
-            predicted result is scores/logits.
-
-        Returns:
-        --------
-        y_pred: np.array of Mx1
-        """
         y_pred = self.forward(X, s_lit, o_lit).view(-1, 1)
 
         if sigmoid:
@@ -729,6 +541,9 @@ class DistMult_literal(Model):
             return y_pred.cpu().data.numpy()
         else:
             return y_pred.data.numpy()
+
+    def predict_all(self, X):
+        raise NotImplementedError()
 
 
 @inherit_docstrings
@@ -741,32 +556,6 @@ class DistMultDecoupled(Model):
     """
 
     def __init__(self, n_s, n_r, n_o, k, lam, gpu=False):
-        """
-        DistMult: diagonal bilinear model, without subject and object constraint
-        ------------------------------------------------------------------------
-
-        Params:
-        -------
-            n_s: int
-                Number of subjects in dataset.
-
-            n_r: int
-                Number of relationships in dataset.
-
-            n_o: int
-                Number of objects in dataset.
-
-            k: int
-                Embedding size.
-
-            lam: float
-                Prior strength of the embeddings. Used to constaint the
-                embedding norms inside a (euclidean) unit ball. The prior is
-                Gaussian, this param is the precision.
-
-            gpu: bool, default: False
-                Whether to use GPU or not.
-        """
         super(DistMultDecoupled, self).__init__(gpu)
 
         # Hyperparams
@@ -789,17 +578,11 @@ class DistMultDecoupled(Model):
             self.cuda()
 
     def forward(self, X):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
         # Decompose X into head, relationship, tail
         s, r, o = X[:, 0], X[:, 1], X[:, 2]
-
-        if self.gpu:
-            s = Variable(torch.from_numpy(s).cuda())
-            r = Variable(torch.from_numpy(r).cuda())
-            o = Variable(torch.from_numpy(o).cuda())
-        else:
-            s = Variable(torch.from_numpy(s))
-            r = Variable(torch.from_numpy(r))
-            o = Variable(torch.from_numpy(o))
 
         # Project to embedding, each is M x k
         e_s = self.emb_S(s)
