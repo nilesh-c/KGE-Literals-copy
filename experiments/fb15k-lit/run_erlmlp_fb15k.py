@@ -10,10 +10,11 @@ import argparse
 import os
 from time import time
 from sklearn.utils import shuffle as skshuffle
+from scipy.sparse import load_npz
 
 
 parser = argparse.ArgumentParser(
-    description='Train ERMLP with literals on MovieLens'
+    description='Train ERLMLP with literals on FB15k'
 )
 
 parser.add_argument('--k', type=int, default=50, metavar='',
@@ -50,12 +51,10 @@ parser.add_argument('--randseed', default=9999, type=int, metavar='',
                     help='resume the training from latest checkpoint (default: False')
 parser.add_argument('--test', default=False, action='store_true',
                     help='Activate test mode: gather results on test set only with trained model.')
-parser.add_argument('--test_model', default=None, metavar='',
-                    help='Model name used for testing, the full path will be appended automatically')
-parser.add_argument('--use_user_lit', default=False, action='store_true',
-                    help='whether to use users literals (default: False)')
-parser.add_argument('--use_movie_lit', default=False, action='store_true',
-                    help='whether to use movies literals (default: False)')
+parser.add_argument('--test_model', default='mtkgnn', metavar='',
+                    help='Model name used for testing, the full path will be appended automatically (default: "mtkgnn")')
+parser.add_argument('--use_num_lit', default=False, action='store_true',
+                    help='whether to use numerical literals (default: False)')
 parser.add_argument('--use_image_lit', default=False, action='store_true',
                     help='whether to use images literals (default: False)')
 parser.add_argument('--use_text_lit', default=False, action='store_true',
@@ -73,48 +72,29 @@ if args.use_gpu:
 
 
 # Load dictionary lookups
-idx2user = np.load('data/ml-100k/bin/idx2user.npy')
-idx2rating = np.load('data/ml-100k/bin/idx2rating.npy')
-idx2movie = np.load('data/ml-100k/bin/idx2movie.npy')
+idx2ent = np.load('data/fb15k-literal/bin/idx2ent.npy')
+idx2rel = np.load('data/fb15k-literal/bin/idx2rel.npy')
 
-n_usr = len(idx2user)
-n_rat = len(idx2rating)
-n_mov = len(idx2movie)
+n_ent = len(idx2ent)
+n_rel = len(idx2rel)
+
+# Load evaluation filters
+filter_s_val = np.load('data/fb15k-literal/bin/filter_s_val.npy')
+filter_o_val = np.load('data/fb15k-literal/bin/filter_o_val.npy')
 
 # Load dataset
-X_train = np.load('data/ml-100k/bin/rating_train.npy')
-X_val = np.load('data/ml-100k/bin/rating_val.npy')
+X_train = np.load('data/fb15k-literal/bin/train.npy').astype(int)
+X_val = np.load('data/fb15k-literal/bin/val.npy').astype(int)
+X_test = np.load('data/fb15k-literal/bin/test.npy').astype(int)
+
 
 # Load literals
-X_lit_usr = np.load('data/ml-100k/bin/user_literals.npy').astype(np.float32)
-X_lit_mov = np.load('data/ml-100k/bin/movie_literals.npy').astype(np.float32)
-X_lit_img = np.load('data/ml-100k/bin/image_literals.npy').astype(np.float32)
-X_lit_txt = np.load('data/ml-100k/bin/text_literals.npy').astype(np.float32)
-
-# Preprocess literals
-
-
-def normalize(X, minn, maxx):
-    return (X - minn) / (maxx - minn + 1e-8)
-
-
-max_usr, min_usr = np.max(X_lit_usr, axis=0), np.min(X_lit_usr, axis=0)
-X_lit_usr = normalize(X_lit_usr, max_usr, min_usr)
-
-max_mov, min_mov = np.max(X_lit_mov, axis=0), np.min(X_lit_mov, axis=0)
-X_lit_mov = normalize(X_lit_mov, max_mov, min_mov)
-
-# Preload literals for validation
-X_lit_usr_val = X_lit_usr[X_val[:, 0]]
-X_lit_mov_val = X_lit_mov[X_val[:, 2]]
-X_lit_img_val = X_lit_img[X_val[:, 2]]  # Features of movies' posters
-X_lit_txt_val = X_lit_txt[X_val[:, 2]]  # Features of movies' titles
+X_lit = np.load('data/fb15k-literal/bin/numerical_literals.npy').astype('float32')
 
 M_train = X_train.shape[0]
 M_val = X_val.shape[0]
 
-n_usr_lit = X_lit_usr.shape[1]
-n_mov_lit = X_lit_mov.shape[1]
+n_lit = X_lit.shape[1]
 
 k = args.k
 h_dim = args.mlp_h
@@ -122,9 +102,7 @@ lam = args.embeddings_lambda
 C = args.negative_samples
 
 # Initialize model
-model = ERLMLP_MovieLens(n_usr, n_mov, n_rat, n_usr_lit, n_mov_lit, k, h_dim, args.use_gpu,
-                         args.use_user_lit, args.use_movie_lit,
-                         args.use_image_lit, args.use_text_lit)
+model = ERLMLP(n_ent, n_rel, n_lit, k, h_dim, args.use_gpu, args.use_num_lit, args.use_image_lit, args.use_text_lit)
 
 # Training params
 lr = args.lr
@@ -132,10 +110,10 @@ wd = args.weight_decay
 
 solver = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
 n_epoch = args.nepoch
-mb_size = args.mbsize  # 2x with negative sampling
+mb_size = args.mbsize
 print_every = args.log_interval
 model_name = 'ermlp_lit'
-checkpoint_dir = '{}/ml-100k'.format(args.checkpoint_dir.rstrip('/'))
+checkpoint_dir = '{}/fb15k'.format(args.checkpoint_dir.rstrip('/'))
 checkpoint_path = '{}/{}_lr{}_wd{}.bin'.format(checkpoint_dir, model_name, lr, wd)
 
 if not os.path.exists(checkpoint_dir):
@@ -147,7 +125,8 @@ Test mode: Evaluate trained model on test set
 =============================================
 """
 if args.test:
-    X_test = np.load('data/ml-100k/bin/rating_test.npy')
+    filter_s_test = np.load('data/fb15k-literal/bin/filter_s_test.npy')
+    filter_o_test = np.load('data/fb15k-literal/bin/filter_o_test.npy')
 
     model_name = '{}/{}.bin'.format(checkpoint_dir, args.test_model)
     state = torch.load(model_name, map_location=lambda storage, loc: storage)
@@ -155,16 +134,18 @@ if args.test:
 
     model.eval()
 
-    hits_ks = [1, 2]
-    mr, mrr, hits = eval_embeddings_rel(model, X_test, n_rat, hits_ks, True,
-                                        X_lit_usr_val, X_lit_mov_val,
-                                        X_lit_img_val, X_lit_txt_val)
+    hits_ks = [1, 3, 10]
 
-    hits1, hits2 = hits
+    # Use entire test set
+    mr, mrr, hits = eval_embeddings_vertical(
+        model, X_test, n_ent, hits_ks, filter_s_test, filter_o_test, n_sample=None,
+        X_lit=X_lit, X_lit_img=None, X_lit_txt=None
+    )
 
-    # For TransE, show loss, mrr & hits@10
-    print('MR: {:.4f}; MRR: {:.4f}; Hits@1: {:.4f}; Hits@2: {:.4f}'
-          .format(mr, mrr, hits1, hits2))
+    hits1, hits3, hits10 = hits
+
+    print('MR: {:.3f}; MRR: {:.3f}; Hits@1: {:.3f}; Hits@3: {:.3f}; Hits@10: {:.3f}'
+          .format(mr, mrr, hits1, hits3, hits10))
 
     # Quit immediately
     exit(0)
@@ -195,20 +176,29 @@ for epoch in range(n_epoch):
         # Build batch with negative sampling
         m = X_mb.shape[0]
         # C x M negative samples
-        X_neg_mb = np.vstack([sample_negatives_rel(X_mb, n_rat)
+        X_neg_mb = np.vstack([sample_negatives(X_mb, n_ent)
                               for _ in range(C)])
 
         X_train_mb = np.vstack([X_mb, X_neg_mb])
         y_true_mb = np.vstack([np.ones([m, 1]), np.zeros([m, 1])])
 
-        X_lit_usr_mb = X_lit_usr[X_train_mb[:, 0]]
-        X_lit_mov_mb = X_lit_mov[X_train_mb[:, 2]]
-        X_lit_img_mb = X_lit_img[X_train_mb[:, 2]]
-        X_lit_txt_mb = X_lit_txt[X_train_mb[:, 2]]
+        # Numerical lit
+        X_lit_s_mb = X_lit[X_train_mb[:, 0]]
+        X_lit_o_mb = X_lit[X_train_mb[:, 2]]
+        # Image lit
+        # X_lit_s_img_mb = X_lit_img[X_train_mb[:, 0]]
+        # X_lit_o_img_mb = X_lit_img[X_train_mb[:, 2]]
+        X_lit_s_img_mb = None
+        X_lit_o_img_mb = None
+        # Text lit
+        # X_lit_s_txt_mb = X_lit_txt[X_train_mb[:, 0]]
+        # X_lit_o_txt_mb = X_lit_txt[X_train_mb[:, 2]]
+        X_lit_s_txt_mb = None
+        X_lit_o_txt_mb = None
 
         # Training step
-        y = model.forward(X_train_mb, X_lit_usr_mb, X_lit_mov_mb, X_lit_img_mb, X_lit_txt_mb)
-
+        y = model.forward(X_train_mb, X_lit_s_mb, X_lit_o_mb, X_lit_s_img_mb,
+                          X_lit_o_img_mb, X_lit_s_txt_mb, X_lit_o_img_mb)
         y_pos, y_neg = y[:m], y[m:]
 
         loss = model.ranking_loss(
@@ -225,22 +215,18 @@ for epoch in range(n_epoch):
         end = time()
 
         # Training logs
-        if it % print_every == 0:
-            model.eval()
+        if print_every != -1 and it % print_every == 0:
+            hits_ks = [1, 3, 10]
 
-            hits_ks = [1, 2]
+            mr, mrr, hits = eval_embeddings_vertical(
+                model, X_test, n_ent, hits_ks, filter_s_test, filter_o_test, n_sample=500,
+                X_lit=X_lit, X_lit_img=None, X_lit_txt=None
+            )
 
-            mr, mrr, hits = eval_embeddings_rel(model, X_val, n_rat, hits_ks, True,
-                                                X_lit_usr_val, X_lit_mov_val,
-                                                X_lit_img_val, X_lit_txt_val)
+            hits1, hits3, hits10 = hits
 
-            hits1, hits2 = hits
-
-            # For TransE, show loss, mrr & hits@10
-            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@2: {:.4f} time per batch: {:.2f}s'
-                  .format(it, loss.data[0], mr, mrr, hits1, hits2, end-start))
-
-            model.train()
+            print('Iter-{}; loss: {:.4f}; val_mr: {:.4f}; val_mrr: {:.4f}; val_hits@1: {:.4f}; val_hits@3: {:.4f}; val_hits@10: {:.4f}; time per batch: {:.2f}s'
+                  .format(it, loss.data[0], mr, mrr, hits1, hits3, hits10, end-start))
 
         it += 1
 

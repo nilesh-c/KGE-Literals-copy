@@ -160,7 +160,7 @@ M_val = X_val.shape[0]
 # Initialize model
 model = ERMLP_literal1(
     n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric, n_text,
-    dim_text, numeric=True, text=True, gpu=True
+    dim_text, numeric=True, text=True, gpu=use_gpu
 )
 
 # Training params

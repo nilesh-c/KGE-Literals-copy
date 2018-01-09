@@ -126,7 +126,7 @@ text_length = 50
 model = ERMLP_literal2(
     n_e, n_r, embedding_size, h_dim, p, embeddings_lambda, n_numeric,
     vocab_size_text, dim_text, embedding_weights, batch_size, text_length,
-    numeric=True, text=True, gpu=True
+    numeric=True, text=True, gpu=use_gpu
 )
 
 # Training params

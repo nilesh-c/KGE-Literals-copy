@@ -56,8 +56,10 @@ class ERLMLP_MovieLens(Model):
             n_input += k
 
         self.mlp = nn.Sequential(
+            nn.Dropout(0.2),
             nn.Linear(n_input, h_dim),
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(h_dim, 1)
         )
 
@@ -77,38 +79,40 @@ class ERLMLP_MovieLens(Model):
         # Decompose X into head, relationship, tail
         s, r, o = X[:, 0], X[:, 1], X[:, 2]
 
-        # Load literals
-        X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
-        X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
-        X_lit_img = Variable(torch.from_numpy(X_lit_img))
-        X_lit_txt = Variable(torch.from_numpy(X_lit_txt))
-
-        if self.gpu:
-            X_lit_usr = X_lit_usr.cuda()
-            X_lit_mov = X_lit_mov.cuda()
-            X_lit_img = X_lit_img.cuda()
-            X_lit_txt = X_lit_txt.cuda()
-
         # Project to embedding, each is M x k
         e_usr = self.emb_usr(s)
         e_rat = self.emb_rat(r)
         e_mov = self.emb_mov(o)
 
-        e_img = self.emb_img(X_lit_img)
-        e_txt = self.emb_txt(X_lit_txt)
-
         phi = torch.cat([e_usr, e_rat, e_mov], 1)
 
         if self.usr_lit:
+            X_lit_usr = Variable(torch.from_numpy(X_lit_usr))
+            X_lit_usr = X_lit_usr.cuda() if self.gpu else X_lit_usr
+
             phi = torch.cat([phi, X_lit_usr], 1)
+
         if self.mov_lit:
+            X_lit_mov = Variable(torch.from_numpy(X_lit_mov))
+            X_lit_mov = X_lit_mov.cuda() if self.gpu else X_lit_mov
+
             phi = torch.cat([phi, X_lit_mov], 1)
+
         if self.img_lit:
+            X_lit_img = Variable(torch.from_numpy(X_lit_img))
+            X_lit_img = X_lit_img.cuda() if self.gpu else X_lit_img
+            e_img = self.emb_img(X_lit_img)
+
             phi = torch.cat([phi, e_img], 1)
+
         if self.txt_lit:
+            X_lit_txt = Variable(torch.from_numpy(X_lit_txt))
+            X_lit_txt = X_lit_txt.cuda() if self.gpu else X_lit_txt
+            e_txt = self.emb_txt(X_lit_txt)
+
             phi = torch.cat([phi, e_txt], 1)
 
-        score = self.mlp(phi)
+        score = self.mlp(phi).view(-1, 1)
 
         return score
 
@@ -119,6 +123,177 @@ class ERLMLP_MovieLens(Model):
             return y_pred.cpu().data.numpy()
         else:
             return y_pred.data.numpy()
+
+
+@inherit_docstrings
+class ERLMLP(Model):
+    """
+    ERL-MLP: Entity-Relation-Literal MLP for generic KG
+    ---------------------------------------------------
+    """
+
+    def __init__(self, n_ent, n_rel, n_lit, k, h_dim, gpu=False, num_lit=False, img_lit=False, txt_lit=False):
+        super(ERLMLP, self).__init__(gpu)
+
+        # Hyperparams
+        self.n_ent = n_ent
+        self.n_rel = n_rel
+        self.n_lit = n_lit
+        self.k = k
+        self.h_dim = h_dim
+        self.num_lit = num_lit
+        self.img_lit = img_lit
+        self.txt_lit = txt_lit
+
+        # Nets
+        self.emb_ent = nn.Embedding(n_ent, k)
+        self.emb_rel = nn.Embedding(n_rel, k)
+
+        self.emb_img = nn.Linear(512, self.k)
+        self.emb_txt = nn.Linear(384, self.k)
+
+        # Determine MLP input size
+        n_input = 3*k
+
+        if num_lit:
+            n_input += 2*n_lit
+        if img_lit:
+            n_input += 2*k
+        if txt_lit:
+            n_input += 2*k
+
+        self.mlp = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(n_input, h_dim),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(h_dim, 1)
+        )
+
+        self.embeddings = [self.emb_ent, self.emb_rel]
+        self.initialize_embeddings()
+
+        # Copy all params to GPU if specified
+        if self.gpu:
+            self.cuda()
+
+    def forward(self, X, X_lit_s, X_lit_o, X_lit_s_img, X_lit_o_img, X_lit_s_txt, X_lit_o_txt):
+        M = X.shape[0]
+
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        s, r, o = X[:, 0], X[:, 1], X[:, 2]
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_ent(s)
+        e_r = self.emb_rel(r)
+        e_o = self.emb_ent(o)
+
+        phi = torch.cat([e_s, e_r, e_o], 1)
+
+        if self.num_lit:
+            X_lit_s = Variable(torch.from_numpy(X_lit_s))
+            X_lit_s = X_lit_s.cuda() if self.gpu else X_lit_s
+
+            X_lit_o = Variable(torch.from_numpy(X_lit_o))
+            X_lit_o = X_lit_o.cuda() if self.gpu else X_lit_o
+
+            phi = torch.cat([phi, X_lit_s, X_lit_o], 1)
+
+        if self.img_lit:
+            X_img_s = Variable(torch.from_numpy(X_lit_s_img))
+            X_img_s = X_img_s.cuda() if self.gpu else X_img_s
+            e_img_s = self.emb_img(X_img_s)
+
+            X_img_o = Variable(torch.from_numpy(X_lit_o_img))
+            X_img_o = X_img_o.cuda() if self.gpu else X_img_o
+            e_img_o = self.emb_img(X_img_o)
+
+            phi = torch.cat([phi, e_img_s, e_img_o], 1)
+
+        if self.txt_lit:
+            X_txt_s = Variable(torch.from_numpy(X_lit_s_txt))
+            X_txt_s = X_txt_s.cuda() if self.gpu else X_txt_s
+            e_txt_s = self.emb_txt(X_txt_s)
+
+            X_txt_o = Variable(torch.from_numpy(X_lit_o_txt))
+            X_txt_o = X_txt_o.cuda() if self.gpu else X_txt_o
+            e_txt_o = self.emb_txt(X_txt_o)
+
+            phi = torch.cat([phi, e_txt_s, e_txt_o], 1)
+
+        score = self.mlp(phi)
+
+        return score
+
+    def predict(self, X, X_lit_s, X_lit_o, X_lit_s_img, X_lit_o_img, X_lit_s_txt, X_lit_o_txt):
+        y_pred = self.forward(X, X_lit_s, X_lit_o, X_lit_s_img, X_lit_o_img,
+                              X_lit_s_txt, X_lit_o_txt).view(-1, 1)
+
+        if self.gpu:
+            return y_pred.cpu().data.numpy()
+        else:
+            return y_pred.data.numpy()
+
+    def predict_all(self, X, **kwargs):
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        # Decompose X into head, relationship, tail
+        s, p, o = X[:, 0], X[:, 1], X[:, 2]
+
+        # Project to embedding, each is M x k
+        e_s = self.emb_ent(s)
+        e_r = self.emb_rel(p)
+        e_o = self.emb_ent(o)
+
+        # Predict o
+        e_s_rep = e_s.repeat(self.n_ent, 1)  # n_ent x k
+        e_r_rep = e_r.repeat(self.n_ent, 1)  # n_ent x k
+        e_o_rep = e_o.repeat(self.n_ent, 1)  # n_ent x k
+
+        phi_s = torch.cat([self.emb_ent.weight, e_r_rep, e_o_rep], 1)  # n_ent x 3k
+        phi_o = torch.cat([e_s_rep, e_r_rep, self.emb_ent.weight], 1)  # n_ent x 3k
+
+        if self.num_lit:
+            X_lit = Variable(torch.from_numpy(kwargs['X_lit']))
+            X_lit = X_lit.cuda() if self.gpu else X_lit
+
+            X_lit_s_rep = X_lit[s].repeat(self.n_ent, 1)
+            X_lit_o_rep = X_lit[o].repeat(self.n_ent, 1)
+
+            phi_s = torch.cat([phi_s, X_lit, X_lit_o_rep], 1)
+            phi_o = torch.cat([phi_o, X_lit_s_rep, X_lit], 1)
+
+        if self.img_lit:
+            X_img = Variable(torch.from_numpy(kwargs['X_lit_img']))
+            X_img = X_img.cuda() if self.gpu else X_img
+            e_img = self.emb_img(X_img)
+
+            e_img_s_rep = e_img[s].repeat(self.n_ent, 1)
+            e_img_o_rep = e_img[o].repeat(self.n_ent, 1)
+
+            phi_s = torch.cat([phi_s, e_img, e_img_o_rep], 1)
+            phi_o = torch.cat([phi_o, e_img_s_rep, e_img], 1)
+
+        if self.txt_lit:
+            X_txt = Variable(torch.from_numpy(kwargs['X_lit_txt']))
+            X_txt = X_txt.cuda() if self.gpu else X_txt
+            e_txt = self.emb_txt(X_txt)
+
+            e_txt_s_rep = e_txt[s].repeat(self.n_ent, 1)
+            e_txt_o_rep = e_txt[o].repeat(self.n_ent, 1)
+
+            phi_s = torch.cat([phi_s, e_txt, e_txt_o_rep], 1)
+            phi_o = torch.cat([phi_o, e_txt_s_rep, e_txt], 1)
+
+        # Predict
+        y_s = self.mlp(phi_s).view(-1)
+        y_o = self.mlp(phi_o).view(-1)
+
+        return y_s, y_o
 
 
 @inherit_docstrings
@@ -241,7 +416,7 @@ class ERMLP_literal1(Model):
         e_ls = self.emb_R(ls)
 
         # Forward
-        phi = torch.cat([e_hs, e_ts, e_ls])
+        phi = torch.cat([e_hs, e_ts, e_ls], 1)
 
         if self.numeric:
             numeric_lit_s = Variable(torch.from_numpy(numeric_lit_s))
@@ -657,7 +832,7 @@ class RESCAL_literal(Model):
 
 
 @inherit_docstrings
-class DistMult_literal(Model):
+class DistMultLiteral(Model):
     """
     DistMult: diagonal bilinear model
     ---------------------------------
@@ -665,61 +840,45 @@ class DistMult_literal(Model):
     neural-embedding models." arXiv:1411.4072 (2014).
     """
 
-    def __init__(self, n_e, n_r, n_l, k, lam, gpu=False):
-        super(DistMult_literal, self).__init__(gpu)
+    def __init__(self, n_e, n_r, n_l, k, gpu=False):
+        super(DistMultLiteral, self).__init__(gpu)
 
         # Hyperparams
         self.n_e = n_e
         self.n_r = n_r
+        self.n_l = n_l
         self.k = k
-        self.lam = lam
-        self.reprs_subject = nn.Linear(n_l, self.k)
-        self.reprs_object = nn.Linear(n_l, self.k)
 
         # Nets
         self.emb_E = nn.Embedding(self.n_e, self.k)
         self.emb_R = nn.Embedding(self.n_r, self.k)
+        self.emb_E_lit = nn.Linear(k+n_l, self.k)
 
         self.embeddings = [self.emb_E, self.emb_R]
         self.initialize_embeddings()
-
-        self.mlp = nn.Sequential(
-            nn.Linear(2*k, k),
-            nn.ReLU()
-        )
 
         # Copy all params to GPU if specified
         if self.gpu:
             self.cuda()
 
-    def forward(self, X, s_lit, o_lit):
+    def forward(self, X, X_lit_s, X_lit_o):
         X = Variable(torch.from_numpy(X)).long()
         X = X.cuda() if self.gpu else X
 
-        # Decompose X into head, relationship, tail
-        hs, ls, ts = X[:, 0], X[:, 1], X[:, 2]
+        s, p, o = X[:, 0], X[:, 1], X[:, 2]
 
-        s_lit = Variable(torch.from_numpy(s_lit))
-        s_lit = s_lit.cuda() if self.gpu else s_lit
-        o_lit = Variable(torch.from_numpy(o_lit))
-        o_lit = o_lit.cuda() if self.gpu else o_lit
+        X_lit_s = Variable(torch.from_numpy(X_lit_s))
+        X_lit_s = X_lit_s.cuda() if self.gpu else X_lit_s
+        X_lit_o = Variable(torch.from_numpy(X_lit_o))
+        X_lit_o = X_lit_o.cuda() if self.gpu else X_lit_o
 
         # Project to embedding, each is M x k
-        e_hs = self.emb_E(hs)
-        e_ts = self.emb_E(ts)
-
-        W = self.emb_R(ls)
-
-        s_rep = self.reprs_subject(s_lit)
-        o_rep = self.reprs_object(o_lit)
-
-        e1_rep = torch.cat([e_hs, s_rep], 1)  # M x 2k
-        e1_rep = self.mlp(e1_rep)   # M x k
-        e2_rep = torch.cat([e_ts, o_rep], 1)  # M x 2k
-        e2_rep = self.mlp(e2_rep)   # M x k
+        s = self.emb_E_lit(torch.cat([self.emb_E(s), X_lit_s], 1))
+        o = self.emb_E_lit(torch.cat([self.emb_E(o), X_lit_o], 1))
+        W = self.emb_R(p)
 
         # Forward
-        f = torch.sum(e1_rep * W * e2_rep, 1)
+        f = torch.sum(s * W * o, 1)
 
         return f.view(-1, 1)
 
@@ -734,5 +893,30 @@ class DistMult_literal(Model):
         else:
             return y_pred.data.numpy()
 
-    def predict_all(self, X):
-        raise NotImplementedError()
+    def predict_all(self, X, **kwargs):
+        # Relations
+        X = Variable(torch.from_numpy(X)).long()
+        X = X.cuda() if self.gpu else X
+
+        s, p, o = X[:, 0], X[:, 1], X[:, 2]
+
+        # Literals
+        X_lit = kwargs['X_lit']
+        X_lit = Variable(torch.from_numpy(X_lit))
+        X_lit = X_lit.cuda() if self.gpu else X_lit
+
+        X_lit_s = X_lit[s]
+        X_lit_o = X_lit[o]
+
+        # 1 x k
+        s = self.emb_E_lit(torch.cat([self.emb_E(s), X_lit_s], 1))
+        o = self.emb_E_lit(torch.cat([self.emb_E(o), X_lit_o], 1))
+        W = self.emb_R(p)
+
+        # n_e x k
+        all_ents = self.emb_E_lit(torch.cat([self.emb_E.weight, X_lit], 1))
+
+        # <(1xk \odot 1xk), k x n_e> = 1 x n_e
+        y_s = torch.mm(W * o, all_ents.t()).view(-1)
+        y_o = torch.mm(s * W, all_ents.t()).view(-1)
+        return y_s, y_o

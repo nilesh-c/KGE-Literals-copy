@@ -4,6 +4,7 @@ import scipy.spatial.distance
 from sklearn.metrics import roc_auc_score
 from collections import defaultdict
 import scipy.stats as st
+from tqdm import tqdm
 
 
 def accuracy(y_pred, y_true, thresh=0.5, reverse=False):
@@ -180,7 +181,7 @@ def eval_embeddings(model, X_test, n_e, k, n_sample=1000, X_lit_s_ori=None, X_li
     return mr, mrr, hitsk
 
 
-def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, descending=True, n_sample=100):
+def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None, descending=True, n_sample=100, **kwargs):
     M = X_test.shape[0]
 
     if n_sample is not None:
@@ -191,12 +192,16 @@ def eval_embeddings_vertical(model, X_test, n_e, k, filter_h=None, filter_t=None
     ranks_h = np.zeros(sample_idxs.shape[0], dtype=int)
     ranks_t = np.zeros(sample_idxs.shape[0], dtype=int)
 
-    for i, idx in enumerate(sample_idxs):
+    for i, idx in tqdm(enumerate(sample_idxs)):
         x = X_test[idx]
         h, t = int(x[0]), int(x[2])
 
         x = x.reshape(1, -1)
-        y_h, y_t = model.predict_all(x)
+
+        if len(kwargs) == 0:
+            y_h, y_t = model.predict_all(x)
+        else:
+            y_h, y_t = model.predict_all(x, **kwargs)
 
         # Filtered setting
         y_h, y_t = y_h.data, y_t.data
